@@ -1,7 +1,8 @@
 import { SAMPLE_SD_JWT, PUBLIC_KEY_JWK, PRIVATE_KEY_JWK, PAYLOAD } from "./params";
 import { base64url, importJWK, KeyLike, SignJWT } from 'jose';
 
-import { createSVCandSDDigests } from "../src";
+import { createSDJWTwithRelease } from "../src";
+import { createSVCandSDDigests } from "../src/issue";
 
 import { verifySDJWTandSVC } from '../src/verify';
 
@@ -12,6 +13,15 @@ import { verifySDJWTandSVC } from '../src/verify';
 it('Verify SD-JWT as holder', async () => {
   const pubkey = await importJWK(PUBLIC_KEY_JWK, 'ES256') as KeyLike;
   const result = await verifySDJWTandSVC(SAMPLE_SD_JWT, pubkey);
+  expect(result).toBe(true);
+});
+
+it('Verify SD-JWT with SD-JWT-R', async () => {
+  const pubkey = await importJWK(PUBLIC_KEY_JWK, 'ES256') as KeyLike;
+  const discloseClaims = ['given_name', 'family_name'];
+  const sdJwtWithRelease = createSDJWTwithRelease(SAMPLE_SD_JWT, discloseClaims);
+
+  const result = await verifySDJWTandSVC(sdJwtWithRelease, pubkey);
   expect(result).toBe(true);
 });
 

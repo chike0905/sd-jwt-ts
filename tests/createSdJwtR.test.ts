@@ -20,6 +20,9 @@ it('Create SD-JWT Release', () => {
 });
 
 // TODO: Holder Binding
+// TODO: missing MUST specification bellow
+// 5.6
+// When the holder sends the SD-JWT-R to the Verifier, the SD-JWT-R MUST be a JWS represented as the JWS Compact Serialization as described in Section 7.1 of [RFC7515].
 it('Create SD-JWT with Release', () => {
   const discloseClaims = ['given_name', 'family_name'];
   const sdJwtWithRelease: string = createSDJWTwithRelease(SAMPLE_SD_JWT, discloseClaims);
