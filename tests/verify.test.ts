@@ -4,118 +4,170 @@ import { base64url, importJWK, KeyLike, SignJWT } from 'jose';
 import { createSDJWTwithRelease } from "../src";
 import { createSVCandSDDigests } from "../src/issue";
 
-import { verifySDJWTandSVC } from '../src/verify';
+import { verifySDJWTandSDJWTR, verifySDJWTandSVC } from '../src/verify';
 
 
 // 6.1 Verification by the Holder when Receiving SD-JWT and SVC
 // 1. Check that all the claims in the SVC are present in the SD-JWT and that there are no claims in the SD-JWT that are not in the SVC 
 // 2. Check that the hashes of the claims in the SVC match those in the SD-JWT
-it('Verify SD-JWT as holder', async () => {
-  const pubkey = await importJWK(PUBLIC_KEY_JWK, 'ES256') as KeyLike;
-  const result = await verifySDJWTandSVC(SAMPLE_SD_JWT, pubkey);
-  expect(result).toBe(true);
+describe('Verify SD-JWT as holder', () => {
+  it('Verify SD-JWT with SVC', async () => {
+    const pubkey = await importJWK(PUBLIC_KEY_JWK, 'ES256') as KeyLike;
+    const result = await verifySDJWTandSVC(SAMPLE_SD_JWT, pubkey);
+    expect(result).toBe(true);
+  });
+  it('SD-JWT string does not contain SVC', async () => {
+    const pubkey = await importJWK(PUBLIC_KEY_JWK, 'ES256') as KeyLike;
+    const invalid_jwt_sd = SAMPLE_SD_JWT.split('.').splice(0, 3).join('.');
+    await expect(verifySDJWTandSVC(invalid_jwt_sd, pubkey)).rejects.toThrow(
+      new Error('sd_jwt string should consist of 4 strings separated by comma.')
+    );
+  });
+
+  it('Signature of JWT in SD-JWT string is invalid', async () => {
+    const pubkey = await importJWK(PUBLIC_KEY_JWK, 'ES256') as KeyLike;
+    const separated = SAMPLE_SD_JWT.split('.');
+    separated[2] = separated[2].slice(0, -2) + 'aa';
+    const invalid_jwt_sd = separated.join('.');
+    await expect(verifySDJWTandSVC(invalid_jwt_sd, pubkey)).rejects.toThrow(
+      new Error('JWT signature in SD-JWT is invalid')
+    );
+  });
+
+  it('JWT in SD-JWT string does not contain sd_digest', async () => {
+    const pubkey = await importJWK(PUBLIC_KEY_JWK, 'ES256') as KeyLike;
+    const separated = SAMPLE_SD_JWT.split('.');
+    const privKey = await importJWK(PRIVATE_KEY_JWK, 'ES256') as KeyLike;
+    const dummyJWT = await new SignJWT({ claim: 'This is dummy JWT' })
+      .setProtectedHeader({ alg: 'ES256' })
+      .sign(privKey);
+    const invalid_jwt_sd = dummyJWT + '.' + separated[3];
+    await expect(verifySDJWTandSVC(invalid_jwt_sd, pubkey)).rejects.toThrow(
+      new Error('The payload of an SD-JWT MUST contain the sd_digests and hash_alg claims.')
+    );
+  });
+
+  it('JWT in SD-JWT string does not contain hash_alg', async () => {
+    const pubkey = await importJWK(PUBLIC_KEY_JWK, 'ES256') as KeyLike;
+    const separated = SAMPLE_SD_JWT.split('.');
+    const privKey = await importJWK(PRIVATE_KEY_JWK, 'ES256') as KeyLike;
+    const dummyJWT = await new SignJWT({ sd_digests: 'This is dummy JWT' })
+      .setProtectedHeader({ alg: 'ES256' })
+      .sign(privKey);
+    const invalid_jwt_sd = dummyJWT + '.' + separated[3];
+    await expect(verifySDJWTandSVC(invalid_jwt_sd, pubkey)).rejects.toThrow(
+      new Error('The payload of an SD-JWT MUST contain the sd_digests and hash_alg claims.')
+    );
+  });
+
+  it('hash_alg in SD-JWT payload does not in IANA Registry ', async () => {
+    const pubkey = await importJWK(PUBLIC_KEY_JWK, 'ES256') as KeyLike;
+    const separated = SAMPLE_SD_JWT.split('.');
+    const privKey = await importJWK(PRIVATE_KEY_JWK, 'ES256') as KeyLike;
+    const dummyJWT = await new SignJWT({
+      sd_digests: 'This is dummy JWT',
+      hash_alg: 'dummy'
+    }).setProtectedHeader({ alg: 'ES256' })
+      .sign(privKey);
+    const invalid_jwt_sd = dummyJWT + '.' + separated[3];
+    await expect(verifySDJWTandSVC(invalid_jwt_sd, pubkey)).rejects.toThrow(
+      new Error('The hash algorithm identifier MUST be a value from the "Hash Name String" column in the IANA "Named Information Hash Algorithm" registry.')
+    );
+  });
+
+  it('SVC does not includes sd_release', async () => {
+    const pubkey = await importJWK(PUBLIC_KEY_JWK, 'ES256') as KeyLike;
+    const separated = SAMPLE_SD_JWT.split('.');
+    const dummySVC = base64url.encode(JSON.stringify({ nonce: 'dummy' }));
+    const invalid_jwt_sd = separated.splice(0, 3).join('.') + '.' + dummySVC;
+    await expect(verifySDJWTandSVC(invalid_jwt_sd, pubkey)).rejects.toThrow(
+      new Error('A SD-JWT Salt/Value Container (SVC) is a JSON object containing at least the top-level property sd_release. ')
+    );
+  });
+
+
+  it('keys in sd_digests and in sd_release of SVC does not match', async () => {
+    const pubkey = await importJWK(PUBLIC_KEY_JWK, 'ES256') as KeyLike;
+
+    const separated = SAMPLE_SD_JWT.split('.');
+    const dummySVC = base64url.encode(JSON.stringify({ sd_release: {} }));
+    const invalid_jwt_sd = separated.splice(0, 3).join('.') + '.' + dummySVC;
+    await expect(() => verifySDJWTandSVC(invalid_jwt_sd, pubkey)).rejects.toThrow(
+      new Error('Keys in sd_digests and sd_release of SVC does not match.')
+    );
+  });
+
+  it('sd_digests does not include hash of sd_release in SVC', async () => {
+    const pubkey = await importJWK(PUBLIC_KEY_JWK, 'ES256') as KeyLike;
+    const dummySVC = base64url.encode(JSON.stringify(createSVCandSDDigests(PAYLOAD).svc));
+
+    const separated = SAMPLE_SD_JWT.split('.');
+    const invalid_jwt_sd = separated.splice(0, 3).join('.') + '.' + dummySVC;
+
+    await expect(() => verifySDJWTandSVC(invalid_jwt_sd, pubkey)).rejects.toThrow(
+      new Error('sd_digest does not match with hash of sd_release.')
+    );
+  });
 });
 
-it('Verify SD-JWT with SD-JWT-R', async () => {
-  const pubkey = await importJWK(PUBLIC_KEY_JWK, 'ES256') as KeyLike;
-  const discloseClaims = ['given_name', 'family_name'];
-  const sdJwtWithRelease = createSDJWTwithRelease(SAMPLE_SD_JWT, discloseClaims);
+describe('Verify SD-JWT as Verifier', () => {
+  let sdJwtWithRelease: string;
+  let pubkey: KeyLike;
+  beforeEach(async () => {
+    const privKey = await importJWK(PRIVATE_KEY_JWK, 'ES256') as KeyLike;
+    const discloseClaims = ['given_name', 'family_name'];
 
-  const result = await verifySDJWTandSVC(sdJwtWithRelease, pubkey);
-  expect(result).toBe(true);
-});
+    pubkey = await importJWK(PUBLIC_KEY_JWK, 'ES256') as KeyLike;
+    sdJwtWithRelease = await createSDJWTwithRelease(SAMPLE_SD_JWT, discloseClaims, privKey);
+  });
 
-it('SD-JWT string does not contain SVC', async () => {
-  const pubkey = await importJWK(PUBLIC_KEY_JWK, 'ES256') as KeyLike;
-  const invalid_jwt_sd = SAMPLE_SD_JWT.split('.').splice(0, 3).join('.');
-  await expect(verifySDJWTandSVC(invalid_jwt_sd, pubkey)).rejects.toThrow(
-    new Error('sd_jwt string should consist of 4 strings separated by comma.')
-  );
-});
+  it('Verify SD-JWT with SD-JWT-R', async () => {
+    const result = await verifySDJWTandSDJWTR(sdJwtWithRelease, pubkey);
+    expect(result).toBe(true);
+  });
 
-it('Signature of JWT in SD-JWT string is invalid', async () => {
-  const pubkey = await importJWK(PUBLIC_KEY_JWK, 'ES256') as KeyLike;
-  const separated = SAMPLE_SD_JWT.split('.');
-  separated[2] = separated[2].slice(0, -2) + 'aa';
-  const invalid_jwt_sd = separated.join('.');
-  await expect(verifySDJWTandSVC(invalid_jwt_sd, pubkey)).rejects.toThrow(
-    new Error('JWT signature in sd_jwt string is invalid')
-  );
-});
+  it('SD-JWT string does not contain SD-JWT-R', async () => {
+    const invalidJwtSd = sdJwtWithRelease.split('.').splice(0, 3).join('.');
+    await expect(verifySDJWTandSDJWTR(invalidJwtSd, pubkey)).rejects.toThrow(
+      new Error('sd_jwt string should be presented as 6 strings separated by comma.')
+    );
+  });
 
-it('JWT in SD-JWT string does not contain sd_digest', async () => {
-  const pubkey = await importJWK(PUBLIC_KEY_JWK, 'ES256') as KeyLike;
-  const separated = SAMPLE_SD_JWT.split('.');
-  const privKey = await importJWK(PRIVATE_KEY_JWK, 'ES256') as KeyLike;
-  const dummyJWT = await new SignJWT({ claim: 'This is dummy JWT' })
-    .setProtectedHeader({ alg: 'ES256' })
-    .sign(privKey);
-  const invalid_jwt_sd = dummyJWT + '.' + separated[3];
-  await expect(verifySDJWTandSVC(invalid_jwt_sd, pubkey)).rejects.toThrow(
-    new Error('The payload of an SD-JWT MUST contain the sd_digests and hash_alg claims.')
-  );
-});
+  it('Signature of JWT in SD-JWT string is invalid', async () => {
+    const separated = sdJwtWithRelease.split('.');
+    separated[2] = separated[2].slice(0, -2) + 'aa';
+    const invalidJwtSd = separated.join('.');
+    await expect(verifySDJWTandSDJWTR(invalidJwtSd, pubkey)).rejects.toThrow(
+      new Error('JWT signature in SD-JWT is invalid')
+    );
 
-it('JWT in SD-JWT string does not contain hash_alg', async () => {
-  const pubkey = await importJWK(PUBLIC_KEY_JWK, 'ES256') as KeyLike;
-  const separated = SAMPLE_SD_JWT.split('.');
-  const privKey = await importJWK(PRIVATE_KEY_JWK, 'ES256') as KeyLike;
-  const dummyJWT = await new SignJWT({ sd_digests: 'This is dummy JWT' })
-    .setProtectedHeader({ alg: 'ES256' })
-    .sign(privKey);
-  const invalid_jwt_sd = dummyJWT + '.' + separated[3];
-  await expect(verifySDJWTandSVC(invalid_jwt_sd, pubkey)).rejects.toThrow(
-    new Error('The payload of an SD-JWT MUST contain the sd_digests and hash_alg claims.')
-  );
-});
+  });
+  it('JWT in SD-JWT string does not contain sd_digest', async () => {
+    const separated = sdJwtWithRelease.split('.');
+    const privKey = await importJWK(PRIVATE_KEY_JWK, 'ES256') as KeyLike;
+    const dummyJWT = await new SignJWT({ claim: 'This is dummy JWT' })
+      .setProtectedHeader({ alg: 'ES256' })
+      .sign(privKey);
+    const invalidJwtSd = dummyJWT + '.' + separated.splice(3).join('.');
+    await expect(verifySDJWTandSDJWTR(invalidJwtSd, pubkey)).rejects.toThrow(
+      new Error('The payload of an SD-JWT MUST contain the sd_digests and hash_alg claims.')
+    );
+  });
 
-it('hash_alg in SD-JWT payload does not in IANA Registry ', async () => {
-  const pubkey = await importJWK(PUBLIC_KEY_JWK, 'ES256') as KeyLike;
-  const separated = SAMPLE_SD_JWT.split('.');
-  const privKey = await importJWK(PRIVATE_KEY_JWK, 'ES256') as KeyLike;
-  const dummyJWT = await new SignJWT({
-    sd_digests: 'This is dummy JWT',
-    hash_alg: 'dummy'
-  }).setProtectedHeader({ alg: 'ES256' })
-    .sign(privKey);
-  const invalid_jwt_sd = dummyJWT + '.' + separated[3];
-  await expect(verifySDJWTandSVC(invalid_jwt_sd, pubkey)).rejects.toThrow(
-    new Error('The hash algorithm identifier MUST be a value from the "Hash Name String" column in the IANA "Named Information Hash Algorithm" registry.')
-  );
-});
+  it('hash_alg in SD-JWT payload does not in IANA Registry ', async () => {
+    const separated = sdJwtWithRelease.split('.');
+    const privKey = await importJWK(PRIVATE_KEY_JWK, 'ES256') as KeyLike;
+    const dummyJWT = await new SignJWT({
+      sd_digests: 'This is dummy JWT',
+      hash_alg: 'dummy'
+    }).setProtectedHeader({ alg: 'ES256' })
+      .sign(privKey);
+    const invalidJwtSd = dummyJWT + '.' + separated.splice(3).join('.');
+    await expect(verifySDJWTandSDJWTR(invalidJwtSd, pubkey)).rejects.toThrow(
+      new Error('The hash algorithm identifier MUST be a value from the "Hash Name String" column in the IANA "Named Information Hash Algorithm" registry.')
+    );
+  });
 
-it('SVC does not includes sd_release', async () => {
-  const pubkey = await importJWK(PUBLIC_KEY_JWK, 'ES256') as KeyLike;
-  const separated = SAMPLE_SD_JWT.split('.');
-  const dummySVC = base64url.encode(JSON.stringify({ nonce: 'dummy' }));
-  const invalid_jwt_sd = separated.splice(0, 3).join('.') + '.' + dummySVC;
-  await expect(verifySDJWTandSVC(invalid_jwt_sd, pubkey)).rejects.toThrow(
-    new Error('A SD-JWT Salt/Value Container (SVC) is a JSON object containing at least the top-level property sd_release. ')
-  );
-});
-
-
-it('keys in sd_digests and in sd_release of SVC does not match', async () => {
-  const pubkey = await importJWK(PUBLIC_KEY_JWK, 'ES256') as KeyLike;
-
-  const separated = SAMPLE_SD_JWT.split('.');
-  const dummySVC = base64url.encode(JSON.stringify({ sd_release: {} }));
-  const invalid_jwt_sd = separated.splice(0, 3).join('.') + '.' + dummySVC;
-  await expect(() => verifySDJWTandSVC(invalid_jwt_sd, pubkey)).rejects.toThrow(
-    new Error('Keys in sd_digests and sd_release of SVC does not match.')
-  );
-});
-
-it('sd_digests does not include hash of sd_release in SVC', async () => {
-  const pubkey = await importJWK(PUBLIC_KEY_JWK, 'ES256') as KeyLike;
-  const dummySVC = base64url.encode(JSON.stringify(createSVCandSDDigests(PAYLOAD).svc));
-
-  const separated = SAMPLE_SD_JWT.split('.');
-  const invalid_jwt_sd = separated.splice(0, 3).join('.') + '.' + dummySVC;
-
-  await expect(() => verifySDJWTandSVC(invalid_jwt_sd, pubkey)).rejects.toThrow(
-    new Error('sd_digest does not match with hash of sd_release.')
-  );
 });
 
 
