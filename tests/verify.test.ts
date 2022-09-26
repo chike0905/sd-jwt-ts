@@ -167,6 +167,27 @@ describe('Verify SD-JWT as Verifier', () => {
       new Error('The hash algorithm identifier MUST be a value from the "Hash Name String" column in the IANA "Named Information Hash Algorithm" registry.')
     );
   });
+  it('Signature of SD-JWT-R is invalid', async () => {
+    const separated = sdJwtWithRelease.split('.');
+    separated[5] = separated[5].slice(0, -2) + 'aa';
+    const invalidJwtSd = separated.join('.');
+    await expect(verifySDJWTandSDJWTR(invalidJwtSd, pubkey)).rejects.toThrow(
+      new Error('JWT signature in SD-JWT-R is invalid')
+    );
+  });
+
+  it('SD-JWT-R does not includes sd_release', async () => {
+    const separated = sdJwtWithRelease.split('.');
+    const privKey = await importJWK(PRIVATE_KEY_JWK, 'ES256') as KeyLike;
+    const dummySDJWTR = await new SignJWT({ nonce: 'dummy' })
+      .setProtectedHeader({ alg: 'ES256' })
+      .sign(privKey);
+
+    const invalidJwtSd = separated.splice(0, 3).join('.') + '.' + dummySDJWTR;
+    await expect(verifySDJWTandSDJWTR(invalidJwtSd, pubkey)).rejects.toThrow(
+      new Error('The payload of an SD-JWT-R MUST contain the sd_release claim.')
+    );
+  });
 
 });
 
