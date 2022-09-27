@@ -4,31 +4,20 @@ import * as crypto from 'crypto';
 
 import { createSVCandSDDigests, issueSDJWT } from '../src';
 
-import { PAYLOAD, HOLDER_KEYPAIR, ISSUER_KEYPAIR } from './params';
+import { PAYLOAD, importKeyPairForIssuerAndHolder, Entity } from './params';
 
 /*
 NOTE: This test suite is implemented based on draft-fett-oauth-selective-disclosure-jwt-02
 https://www.ietf.org/archive/id/draft-fett-oauth-selective-disclosure-jwt-02.html
 */
 
-type Entity = {
-  PUBLIC_KEY: KeyLike,
-  PRIVATE_KEY: KeyLike
-}
+
 
 let ISSUER: Entity;
 let HOLDER: Entity;
 
 beforeEach(async () => {
-  ISSUER = {
-    PUBLIC_KEY: await importJWK(ISSUER_KEYPAIR.PUBLIC_KEY_JWK, 'ES256') as KeyLike,
-    PRIVATE_KEY: await importJWK(ISSUER_KEYPAIR.PRIVATE_KEY_JWK, 'ES256') as KeyLike,
-  };
-
-  HOLDER = {
-    PUBLIC_KEY: await importJWK(HOLDER_KEYPAIR.PRIVATE_KEY_JWK, 'ES256') as KeyLike,
-    PRIVATE_KEY: await importJWK(HOLDER_KEYPAIR.PRIVATE_KEY_JWK, 'ES256') as KeyLike,
-  };
+  ({ ISSUER, HOLDER } = await importKeyPairForIssuerAndHolder());
 });
 
 //  5.1 
