@@ -1,4 +1,4 @@
-import { base64url, importJWK, jwtVerify, KeyLike } from 'jose';
+import { base64url, exportJWK, importJWK, jwtVerify, KeyLike } from 'jose';
 import { decodeJwt } from 'jose';
 import * as crypto from 'crypto';
 
@@ -83,7 +83,12 @@ it('hash_alg in sd_digest is a value from IANA Registory', async () => {
 // ...
 // Note: need to define how holder public key is included, right now examples are using sub_jwk I think.
 it('Issue SD-JWT with Holder Binding', async () => {
-
+  const sdJwt: string = await issueSDJWT(PAYLOAD, ISSUER.PRIVATE_KEY, HOLDER.PUBLIC_KEY);
+  const splittedSdJwt = sdJwt.split('.');
+  const jwt = splittedSdJwt.slice(0, 3).join('.');
+  const jwtPayload = decodeJwt(jwt);
+  expect(jwtPayload).toHaveProperty('sub_jwk');
+  expect(jwtPayload.sub_jwk).toEqual(await exportJWK(HOLDER.PUBLIC_KEY));
 });
 
 // 5.3

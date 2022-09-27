@@ -8,14 +8,23 @@ const SALT_BYTE_SIZE = 256 / 8;
 
 // TODO: Now this returns combined format as single string (jwt + base64url encoded SVC) 
 // It might be useful that issuer can select separated format (jwt and json format SVC?)
-export const issueSDJWT = async (claims: SD_JWTClaims, privateKey: KeyLike):
+export const issueSDJWT = async (
+  claims: SD_JWTClaims,
+  privateKey: KeyLike,
+  holderPublicKey?: KeyLike
+):
   Promise<string> => {
   const { svc, sd_digests } = createSVCandSDDigests(claims);
 
   const sdJWTPayload = {
     sd_digests,
-    'hash_alg': 'sha-256' // TODO: tmp support only sha-256
+    hash_alg: 'sha-256' // TODO: tmp support only sha-256
   };
+  if (holderPublicKey) {
+    const sub_jwk = await jose.exportJWK(holderPublicKey);
+    Object.defineProperty(sdJWTPayload, 'sub_jwk', { value: sub_jwk, enumerable: true });
+  }
+
   const jwt = await new jose.SignJWT(sdJWTPayload)
     .setProtectedHeader({ alg: 'ES256' }) // TODO: tmp support only ES256
     .sign(privateKey);
