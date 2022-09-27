@@ -4,49 +4,66 @@ import * as crypto from 'crypto';
 
 import { createSVCandSDDigests, issueSDJWT } from '../src';
 
-import { PRIVATE_KEY_JWK, PUBLIC_KEY_JWK, PAYLOAD } from './params';
+import { PAYLOAD, HOLDER_KEYPAIR, ISSUER_KEYPAIR } from './params';
 
 /*
 NOTE: This test suite is implemented based on draft-fett-oauth-selective-disclosure-jwt-02
 https://www.ietf.org/archive/id/draft-fett-oauth-selective-disclosure-jwt-02.html
 */
 
+type Entity = {
+  PUBLIC_KEY: KeyLike,
+  PRIVATE_KEY: KeyLike
+}
+
+let ISSUER: Entity;
+let HOLDER: Entity;
+
+beforeEach(async () => {
+  ISSUER = {
+    PUBLIC_KEY: await importJWK(ISSUER_KEYPAIR.PUBLIC_KEY_JWK, 'ES256') as KeyLike,
+    PRIVATE_KEY: await importJWK(ISSUER_KEYPAIR.PRIVATE_KEY_JWK, 'ES256') as KeyLike,
+  };
+
+  HOLDER = {
+    PUBLIC_KEY: await importJWK(HOLDER_KEYPAIR.PRIVATE_KEY_JWK, 'ES256') as KeyLike,
+    PRIVATE_KEY: await importJWK(HOLDER_KEYPAIR.PRIVATE_KEY_JWK, 'ES256') as KeyLike,
+  };
+});
 
 //  5.1 
 // The payload of an SD-JWT MUST contain the sd_digests and hash_alg claims described in the following, and MAY contain a holder's public key or a reference thereto, as well as further claims such as iss, iat, etc. as defined or required by the application using SD-JWTs.
 it('Issue JWT-SD', async () => {
-  const privKey = await importJWK(PRIVATE_KEY_JWK, 'ES256') as KeyLike;
-  const sd_jwt: string = await issueSDJWT(PAYLOAD, privKey);
+  const sdJwt: string = await issueSDJWT(PAYLOAD, ISSUER.PRIVATE_KEY);
 
   // SD-JWT is combined jwt and svc;
-  const splitted_sd_jwt = sd_jwt.split('.');
-  expect(splitted_sd_jwt.length).toBe(4);
+  const splittedSdJwt = sdJwt.split('.');
+  expect(splittedSdJwt.length).toBe(4);
 
   // Decoding
-  const raw_svc = base64url.decode(splitted_sd_jwt[3]).toString();
+  const raw_svc = base64url.decode(splittedSdJwt[3]).toString();
   const svc = JSON.parse(raw_svc);
-  const jwt = splitted_sd_jwt.slice(0, 3).join('.');
+  const jwt = splittedSdJwt.slice(0, 3).join('.');
 
   // Verify JWT itself
-  const pubkey = await importJWK(PUBLIC_KEY_JWK, 'ES256') as KeyLike;
-  const jwt_payload = (await jwtVerify(jwt, pubkey)).payload;
+  const jwtPayload = (await jwtVerify(jwt, ISSUER.PUBLIC_KEY)).payload;
 
   // SVC has sd_release
   expect(svc).toHaveProperty('sd_release');
 
   // JWT in SD-JWT has sd_digests and hash_alg
-  expect(jwt_payload).toHaveProperty('sd_digests');
-  expect(jwt_payload).toHaveProperty('hash_alg');
+  expect(jwtPayload).toHaveProperty('sd_digests');
+  expect(jwtPayload).toHaveProperty('hash_alg');
 
   // sd_digests includes all claims in SVC
-  expect(Object.keys(jwt_payload.sd_digests as Object))
+  expect(Object.keys(jwtPayload.sd_digests as Object))
     .toStrictEqual(Object.keys(svc.sd_release));
 
   // sd_digests are hash of svc items
   Object.keys(svc.sd_release).map((key: string) => {
     const hashOfValueInSVC_b64 = base64url.encode(crypto.createHash('sha256')
       .update(svc.sd_release[key]).digest());
-    expect((jwt_payload.sd_digests as any)[key]).toBe(hashOfValueInSVC_b64);
+    expect((jwtPayload.sd_digests as any)[key]).toBe(hashOfValueInSVC_b64);
   });
 });
 
@@ -64,13 +81,20 @@ it('sd_digest has properties for each claim', () => {
 // ref: https://www.iana.org/assignments/named-information/named-information.xhtml
 it('hash_alg in sd_digest is a value from IANA Registory', async () => {
   const HashNameString = ['Reserved', 'sha-256', 'sha-256-128', 'sha-256-120', 'sha-256-96', 'sha-256-64', 'sha-256-32', 'sha-384', 'sha-512', 'sha3-224', 'sha3-256', 'sha3-384', 'sha3-512', 'Unassigned', 'Reserved', 'Unassigned', 'blake2s-256', 'blake2b-256', 'blake2b-512', 'k12-256', 'k12-512'];
-  const privKey = await importJWK(PRIVATE_KEY_JWK, 'ES256') as KeyLike;
-  const sd_jwt = await issueSDJWT(PAYLOAD, privKey);
-  const splitted_sd_jwt = sd_jwt.split('.');
-  const jwt = splitted_sd_jwt.slice(0, 3).join('.');
+  const sdJwt = await issueSDJWT(PAYLOAD, ISSUER.PRIVATE_KEY);
+  const splittedSdJwt = sdJwt.split('.');
+  const jwt = splittedSdJwt.slice(0, 3).join('.');
 
   const decodedJwt = decodeJwt(jwt);
   expect(HashNameString.includes(decodedJwt.hash_alg as string)).toBe(true);
+});
+
+// 5.1.3. Holder Public Key Claim
+// If the issuer wants to enable holder binding, it MAY include a public key associated with the holder, or a reference thereto.
+// ...
+// Note: need to define how holder public key is included, right now examples are using sub_jwk I think.
+it('Issue SD-JWT with Holder Binding', async () => {
+
 });
 
 // 5.3

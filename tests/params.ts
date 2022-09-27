@@ -13,6 +13,38 @@ export const PUBLIC_KEY_JWK = {
   crv: 'P-256'
 };
 
+export const ISSUER_KEYPAIR = {
+  PUBLIC_KEY_JWK: {
+    kty: 'EC',
+    x: 'QxM0mbg6Ow3zTZZjKMuBv-Be_QsGDfRpPe3m1OP90zk',
+    y: 'aR-Qm7Ckg9TmtcK9-miSaMV2_jd4rYq6ZsFRNb8dZ2o',
+    crv: 'P-256'
+  },
+  PRIVATE_KEY_JWK: {
+    kty: 'EC',
+    x: 'QxM0mbg6Ow3zTZZjKMuBv-Be_QsGDfRpPe3m1OP90zk',
+    y: 'aR-Qm7Ckg9TmtcK9-miSaMV2_jd4rYq6ZsFRNb8dZ2o',
+    crv: 'P-256',
+    d: 'fWfGrvu1tUqnyYHrdlpZiBsxkMoeim3EleoPEafV_yM'
+  }
+}
+
+export const HOLDER_KEYPAIR = {
+  PUBLIC_KEY_JWK: {
+    kty: 'EC',
+    x: 'Juiif_Dm5T-xVYbcNZ72jSAk4t4ij5Bmgl7WGKO0uJQ',
+    y: 'nqGkThWyZYFdQ3nnpkeoeey7edX7BV6-C9R3mOf1x1M',
+    crv: 'P-256'
+  },
+  PRIVATE_KEY_JWK: {
+    kty: 'EC',
+    x: 'Juiif_Dm5T-xVYbcNZ72jSAk4t4ij5Bmgl7WGKO0uJQ',
+    y: 'nqGkThWyZYFdQ3nnpkeoeey7edX7BV6-C9R3mOf1x1M',
+    crv: 'P-256',
+    d: 'mNCbN_oN0w43TgR_-wxa4tbZ7D6hTevIk1UtbiHXHXU'
+  }
+};
+
 export const PAYLOAD = {
   "sub": "6c5c0a49-b589-431d-bae7-219122a9ec2c",
   "given_name": "John",
