@@ -23,7 +23,6 @@ beforeEach(async () => {
 // 5.6 SD-JWT Release
 // For each claim, an array of the salt and the claim value is contained in the sd_release object. The structure of sd_release object in the SD-JWT-R is the same as in SD-JWT.
 it('Create SD-JWT Release', async () => {
-  // const { svc } = createSVCandSDDigests(PAYLOAD);
   const discloseClaims = ['given_name', 'family_name'];
 
   const sdJwtRelease: string = await createSDJWTRelease(TEST_SVC, discloseClaims, ISSUER.PRIVATE_KEY);
