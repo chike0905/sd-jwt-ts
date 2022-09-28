@@ -289,7 +289,7 @@ describe('Verify SD-JWT as Verifier', () => {
 
       sdJwtRPayload.sd_release.family_name = 'aa';
       const hashOfClaim = base64url.encode(crypto.createHash('sha256')
-        .update(sdJwtRPayload.sd_release.family_name).digest());
+        .update(sdJwtRPayload.sd_release.family_name as string).digest());
       // @ts-ignore
       sdJwtPayload.sd_digests.family_name = hashOfClaim;
 
@@ -310,7 +310,7 @@ describe('Verify SD-JWT as Verifier', () => {
       // @ts-ignore
       sdJwtRPayload.sd_release.family_name = JSON.stringify({ nonce: 'It is dummy.' });
       const hashOfClaim = base64url.encode(crypto.createHash('sha256')
-        .update(sdJwtRPayload.sd_release.family_name).digest());
+        .update(sdJwtRPayload.sd_release.family_name as string).digest());
       // @ts-ignore
       sdJwtPayload.sd_digests.family_name = hashOfClaim;
 
@@ -331,7 +331,7 @@ describe('Verify SD-JWT as Verifier', () => {
       // @ts-ignore
       sdJwtRPayload.sd_release.family_name = JSON.stringify(['It', 'is', 'dummy.']);
       const hashOfClaim = base64url.encode(crypto.createHash('sha256')
-        .update(sdJwtRPayload.sd_release.family_name).digest());
+        .update(sdJwtRPayload.sd_release.family_name as string).digest());
       // @ts-ignore
       sdJwtPayload.sd_digests.family_name = hashOfClaim;
 

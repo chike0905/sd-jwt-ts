@@ -85,7 +85,7 @@ const validateSdJWTwithRelease = async (
   discloseClaims.map((key) => {
     // @ts-ignore
     const hashOfValueInRelease_b64 = base64url.encode(crypto.createHash('sha256')
-      .update(sdJwtRPayload.sd_release[key]).digest());
+      .update(sdJwtRPayload.sd_release[key] as string).digest());
     expect((sdJwtPayload.sd_digests as SD_DIGESTS)[key]).toBe(hashOfValueInRelease_b64);
   });
 };

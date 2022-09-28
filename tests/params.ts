@@ -53,12 +53,12 @@ export const PAYLOAD = {
   "family_name": "Doe",
   "email": "johndoe@example.com",
   "phone_number": "+1-202-555-0101",
-  // "address": {
-  //   "street_address": "123 Main St",
-  //   "locality": "Anytown",
-  //   "region": "Anystate",
-  //   "country": "US"
-  // },
+  "address": {
+    "street_address": "123 Main St",
+    "locality": "Anytown",
+    "region": "Anystate",
+    "country": "US"
+  },
   "birthdate": "1940-01-01"
 };
 

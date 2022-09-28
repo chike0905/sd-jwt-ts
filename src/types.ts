@@ -3,12 +3,12 @@ export type SD_JWTClaims = {
 };
 
 export type SD_DIGESTS = {
-  [propName: string]: string
+  [propName: string]: string | Object
 };
 
 export type SVC = {
   sd_release: {
-    [propName: string]: string
+    [propName: string]: string | Object
   }
 };
 

@@ -28,7 +28,7 @@ export const verifySDJWTandSVC = async (sdJwtWithSVC: string, publicKey: KeyLike
   // @ts-ignore
   Object.keys(sdJwtPayload.sd_digests).map((key) => {
     const hashOfSdRelease = base64url.encode(crypto.createHash('sha256')
-      .update(svc.sd_release[key]).digest());
+      .update(svc.sd_release[key] as string).digest());
     if ((sdJwtPayload.sd_digests as SD_DIGESTS)[key] !== hashOfSdRelease)
       throw new Error('sd_digest does not match with hash of sd_release.');
   });
@@ -77,7 +77,7 @@ export const verifySDJWTandSDJWTR = async (sdJwtStr: string, IssuerPublicKey: Ke
     // TODO: Structured
     const hashInSdJwt = (sdJwtPayload.sd_digests as SD_DIGESTS)[key];
     const hashOfClaim = base64url.encode(crypto.createHash('sha256')
-      .update(disclosedClaimsInRelease[key]).digest());
+      .update(disclosedClaimsInRelease[key] as string).digest());
     if (hashInSdJwt !== hashOfClaim)
       throw new Error('Hash value of claims in SD-JWT-R does not match with claims in SD-JWT.');
   });
@@ -88,7 +88,7 @@ export const verifySDJWTandSDJWTR = async (sdJwtStr: string, IssuerPublicKey: Ke
   Object.keys(disclosedClaimsInRelease).map((key) => {
     let claimArray;
     try {
-      claimArray = JSON.parse(disclosedClaimsInRelease[key]);
+      claimArray = JSON.parse(disclosedClaimsInRelease[key] as string);
     } catch (e) {
       throw new Error('Claims in SD-JWT-R are not JSON-encoded.');
     }

@@ -11,10 +11,11 @@ const SALT_BYTE_SIZE = 256 / 8;
 export const issueSDJWT = async (
   claims: SD_JWTClaims,
   privateKey: KeyLike,
-  holderPublicKey?: KeyLike
+  holderPublicKey?: KeyLike,
+  structured: boolean = false
 ):
   Promise<string> => {
-  const { svc, sd_digests } = createSVCandSDDigests(claims);
+  const { svc, sd_digests } = createSVCandSDDigests(claims, structured);
 
   const sdJWTPayload = {
     sd_digests,
@@ -36,21 +37,33 @@ export const issueSDJWT = async (
   return sd_jwt;
 };
 
-export const createSVCandSDDigests = (claims: SD_JWTClaims): {
+export const createSVCandSDDigests = (
+  claims: SD_JWTClaims,
+  structured: boolean = false
+): {
   sd_digests: SD_DIGESTS,
   svc: SVC
 } => {
   let svc = { sd_release: {} };
   let sd_digests = {};
 
-  // TODO: recessively for structured claims
   Object.keys(claims).map((key: string) => {
-    const salt: Buffer = crypto.randomBytes(SALT_BYTE_SIZE);
-    const svc_item_tuple = [base64url.encode(salt), claims[key]];
-    // NOTE: JSON.stringify does not encode with \ escape for quat
-    const svc_item = JSON.stringify(svc_item_tuple);
-    const sd_digest_item = base64url.encode(crypto.createHash('sha256')
-      .update(svc_item).digest());
+    let svc_item;
+    let sd_digest_item;
+    if (structured && claims[key] instanceof Object) {
+      const { sd_digests, svc } =
+        createSVCandSDDigests(claims[key] as SD_JWTClaims, structured);
+      svc_item = svc.sd_release;
+      sd_digest_item = sd_digests;
+    } else {
+      const salt: Buffer = crypto.randomBytes(SALT_BYTE_SIZE);
+      const svc_item_tuple = [base64url.encode(salt), claims[key]];
+      // NOTE: JSON.stringify does not encode with \ escape for quat
+      svc_item = JSON.stringify(svc_item_tuple);
+      sd_digest_item = base64url.encode(crypto.createHash('sha256')
+        .update(svc_item).digest());
+    }
+
     Object.defineProperty(sd_digests, key, {
       value: sd_digest_item,
       enumerable: true,
