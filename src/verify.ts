@@ -1,4 +1,4 @@
-import { base64url, JWTPayload, jwtVerify, KeyLike } from "jose";
+import { base64url, importJWK, JWK, JWTPayload, jwtVerify, KeyLike, UnsecuredJWT } from "jose";
 import * as crypto from 'crypto';
 import { SD_DIGESTS, SD_JWT_RELEASE, SVC } from "./types";
 import { separateJWTandSDJWTR, separateJWTandSVC } from "./utils";
@@ -37,22 +37,32 @@ export const verifySDJWTandSVC = async (sdJwtWithSVC: string, publicKey: KeyLike
 };
 
 // 6.2 Verification by the Verifier when Receiving SD-JWT and SD-JWT-R
-export const verifySDJWTandSDJWTR = async (sdJwtStr: string, publicKey: KeyLike):
+export const verifySDJWTandSDJWTR = async (sdJwtStr: string, IssuerPublicKey: KeyLike, holderPublicKey?: KeyLike):
   Promise<{}> => {
-  // TODO: holder binding
   // 1. Determine if holder binding is to be checked for the SD-JWT. Refer to Section 7.6 for details.
+  // NOTE: this process is implemented around validateSdJwtRelease() for 5-1
   // 2. Check that the presentation consists of six period-separated (.) elements; if holder binding is not required, the last element can be empty.
 
   // 3. Separate the SD-JWT from the SD-JWT Release.
   const { sdJwt, sdJwtR } = separateJWTandSDJWTR(sdJwtStr);
 
   // 4. Validate the SD-JWT:
-  const sdJwtPayload = await validateSdJWT(sdJwt, publicKey);
+  const sdJwtPayload = await validateSdJWT(sdJwt, IssuerPublicKey);
 
   // 5. Validate the SD-JWT Release:
-  // TODO: tmp Keys for SD-JWT and for SD-JWT-R are same.
+
   // 5-1. If holder binding is required, validate the signature over the SD-JWT using the same steps as for the SD-JWT plus the following steps:
-  const sdJwtReleasePayload = await validateSdJwtRelease(sdJwtR, publicKey);
+
+  // TODO: tmp 
+  // Keys for SD-JWT-R is specified in sub_jwk in SD-JWT payload.
+  // If holderPublicKey is provided, override it.
+  let boundedKey: KeyLike | undefined;
+  if (sdJwtPayload.hasOwnProperty('sub_jwk'))
+    boundedKey = await importJWK(sdJwtPayload.sub_jwk as JWK, 'ES256') as KeyLike;
+  if (holderPublicKey)
+    boundedKey = holderPublicKey
+
+  const sdJwtReleasePayload = await validateSdJwtRelease(sdJwtR, boundedKey);
 
   // 5-2. For each claim in the SD-JWT Release:
   const disclosedClaimsInRelease = (sdJwtReleasePayload as SD_JWT_RELEASE).sd_release;
@@ -102,16 +112,24 @@ export const verifySDJWTandSDJWTR = async (sdJwtStr: string, publicKey: KeyLike)
 // 5-1. If holder binding is required, validate the signature over the SD-JWT using the same steps as for the SD-JWT plus the following steps:
 // 5-1-1. Determine that the public key for the private key that used to sign the SD-JWT-R is bound to the SD-JWT, i.e., the SD-JWT either contains a reference to the public key or contains the public key itself.
 // 5-1-2. Determine that the SD-JWT-R is bound to the current transaction and was created for this verifier (replay protection). This is usually achieved by a nonce and aud field within the SD-JWT Release.
-const validateSdJwtRelease = async (sdJwtRelease: string, publicKey: KeyLike):
+const validateSdJwtRelease = async (sdJwtRelease: string, publicKey?: KeyLike):
   Promise<JWTPayload> => {
-  // Signature validation
-  let sdJwtReleasePayload: JWTPayload
-  try {
-    sdJwtReleasePayload = (await jwtVerify(sdJwtRelease, publicKey)).payload;
-  } catch (e) {
-    throw new Error('JWT signature in SD-JWT-R is invalid');
-  }
 
+  let sdJwtReleasePayload: JWTPayload
+  const separated = sdJwtRelease.split('.');
+  if (separated[2] === '') {
+    // SD-JWT-R is not signed.
+    sdJwtReleasePayload = UnsecuredJWT.decode(sdJwtRelease).payload;
+  } else {
+    // Signature validation
+    if (!publicKey)
+      throw new Error('SD-JWT-R is signed, but does not be provided a key for validate it.');
+    try {
+      sdJwtReleasePayload = (await jwtVerify(sdJwtRelease, publicKey)).payload;
+    } catch (e) {
+      throw new Error('JWT signature in SD-JWT-R is invalid');
+    }
+  }
   if (!sdJwtReleasePayload.sd_release)
     throw new Error('The payload of an SD-JWT-R MUST contain the sd_release claim.');
 
