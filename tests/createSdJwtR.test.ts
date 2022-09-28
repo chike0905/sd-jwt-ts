@@ -1,4 +1,4 @@
-import { base64url, decodeJwt, jwtVerify, UnsecuredJWT } from "jose";
+import { base64url, jwtVerify, UnsecuredJWT } from "jose";
 import * as crypto from 'crypto';
 
 import { PAYLOAD, importKeyPairForIssuerAndHolder, Entity } from "./params";

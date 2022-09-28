@@ -1,5 +1,4 @@
-import { base64url, CompactSign, decodeJwt, importJWK, JWK, jwtVerify, KeyLike, SignJWT, UnsecuredJWT } from "jose";
-import * as crypto from 'crypto';
+import { decodeJwt, importJWK, JWK, jwtVerify, KeyLike, SignJWT, UnsecuredJWT } from "jose";
 import { SVC, SD_JWT_RELEASE } from "./types";
 import { separateJWTandSVC } from "./utils";
 
