@@ -51,7 +51,7 @@ it('Create SD-JWT Release without Signature', async () => {
   });
 });
 
-// TODO: Holder Binding
+
 // 5.6
 // When the holder sends the SD-JWT-R to the Verifier, the SD-JWT-R MUST be a JWS represented as the JWS Compact Serialization as described in Section 7.1 of [RFC7515].
 

@@ -1,7 +1,7 @@
 import { base64url, decodeJwt, SignJWT } from 'jose';
 import * as crypto from 'crypto';
 
-import { createSDJWTwithRelease, SD_JWT_RELEASE } from "../src";
+import { createSDJWTwithRelease, SD_JWTClaims, SD_JWT_RELEASE, SVC } from "../src";
 import { createSVCandSDDigests, issueSDJWT } from "../src/issue";
 import { PAYLOAD, importKeyPairForIssuerAndHolder, Entity } from './params';
 
@@ -145,7 +145,7 @@ describe('Verify SD-JWT as Verifier', () => {
     });
 
     // 1. Determine if holder binding is to be checked for the SD-JWT. Refer to Section 7.6 for details.
-    // TODO: holder binidng
+    // NOTE: holder binding is implemented in JWT-SD-R validation process. 
 
     // 2. Check that the presentation consists of six period-separated (.) elements; if holder binding is not required, the last element can be empty.
     it('SD-JWT string does not contain SD-JWT-R', async () => {
@@ -206,6 +206,8 @@ describe('Verify SD-JWT as Verifier', () => {
 
     // 5. Validate the SD-JWT Release:
     // 5-1. If holder binding is required, validate the signature over the SD-JWT using the same steps as for the SD-JWT plus the following steps:
+    // 5-1-1. Determine that the public key for the private key that used to sign the SD-JWT-R is bound to the SD-JWT, i.e., the SD-JWT either contains a reference to the public key or contains the public key itself.
+    // NOTE: tmp this implementation uses sub_jwk for holder binding. It is required to use a key that is pair of another key specified sub_jwk in SD-JWT.
     it('Signature of SD-JWT-R is invalid', async () => {
       const separated = sdJwtWithRelease.split('.');
       separated[5] = separated[5].slice(0, -2) + 'aa';
@@ -216,9 +218,6 @@ describe('Verify SD-JWT as Verifier', () => {
           new Error('JWT signature in SD-JWT-R is invalid')
         );
     });
-
-    // 5-1-1. Determine that the public key for the private key that used to sign the SD-JWT-R is bound to the SD-JWT, i.e., the SD-JWT either contains a reference to the public key or contains the public key itself.
-    // TODO: holder binding
 
 
     // 5-1-2. Determine that the SD-JWT-R is bound to the current transaction and was created for this verifier (replay protection). This is usually achieved by a nonce and aud field within the SD-JWT Release.
@@ -268,6 +267,18 @@ describe('Verify SD-JWT as Verifier', () => {
         );
     });
 
+    const composeInvalidSdJWT = async (sdJwtPayload: SD_JWTClaims, sdJwtRPayload: SVC) => {
+      const invalidJwt = await new SignJWT(sdJwtPayload)
+        .setProtectedHeader({ alg: 'ES256' }) // TODO: tmp support only ES256
+        .sign(ISSUER.PRIVATE_KEY);
+      const invalidJwtSdR = await new SignJWT(sdJwtRPayload)
+        .setProtectedHeader({ alg: 'ES256' }) // TODO: tmp support only ES256
+        .sign(HOLDER.PRIVATE_KEY);
+
+      const invalidSdJwt = invalidJwt + '.' + invalidJwtSdR;
+      return invalidSdJwt;
+    }
+
     // 5-2-4. Ensure that the claim value in the SD-JWT-R is a JSON-encoded array of exactly two values.
     // 5-2-4. Store the second of the two values.
     it('Claims in SD-JWT-R are not JSON-encoded.', async () => {
@@ -282,14 +293,7 @@ describe('Verify SD-JWT as Verifier', () => {
       // @ts-ignore
       sdJwtPayload.sd_digests.family_name = hashOfClaim;
 
-      const invalidJwt = await new SignJWT(sdJwtPayload)
-        .setProtectedHeader({ alg: 'ES256' }) // TODO: tmp support only ES256
-        .sign(ISSUER.PRIVATE_KEY);
-      const invalidJwtSdR = await new SignJWT(sdJwtRPayload)
-        .setProtectedHeader({ alg: 'ES256' }) // TODO: tmp support only ES256
-        .sign(HOLDER.PRIVATE_KEY);
-
-      const invalidSdJwt = invalidJwt + '.' + invalidJwtSdR;
+      const invalidSdJwt = await composeInvalidSdJWT(sdJwtPayload, sdJwtRPayload);
 
       await expect(verifySDJWTandSDJWTR(invalidSdJwt, ISSUER.PUBLIC_KEY))
         .rejects.toThrow(
@@ -310,14 +314,7 @@ describe('Verify SD-JWT as Verifier', () => {
       // @ts-ignore
       sdJwtPayload.sd_digests.family_name = hashOfClaim;
 
-      const invalidJwt = await new SignJWT(sdJwtPayload)
-        .setProtectedHeader({ alg: 'ES256' }) // TODO: tmp support only ES256
-        .sign(ISSUER.PRIVATE_KEY);
-      const invalidJwtSdR = await new SignJWT(sdJwtRPayload)
-        .setProtectedHeader({ alg: 'ES256' }) // TODO: tmp support only ES256
-        .sign(HOLDER.PRIVATE_KEY);
-
-      const invalidSdJwt = invalidJwt + '.' + invalidJwtSdR;
+      const invalidSdJwt = await composeInvalidSdJWT(sdJwtPayload, sdJwtRPayload);
 
       await expect(verifySDJWTandSDJWTR(invalidSdJwt, ISSUER.PUBLIC_KEY))
         .rejects.toThrow(
@@ -338,14 +335,7 @@ describe('Verify SD-JWT as Verifier', () => {
       // @ts-ignore
       sdJwtPayload.sd_digests.family_name = hashOfClaim;
 
-      const invalidJwt = await new SignJWT(sdJwtPayload)
-        .setProtectedHeader({ alg: 'ES256' }) // TODO: tmp support only ES256
-        .sign(ISSUER.PRIVATE_KEY);
-      const invalidJwtSdR = await new SignJWT(sdJwtRPayload)
-        .setProtectedHeader({ alg: 'ES256' }) // TODO: tmp support only ES256
-        .sign(HOLDER.PRIVATE_KEY);
-
-      const invalidSdJwt = invalidJwt + '.' + invalidJwtSdR;
+      const invalidSdJwt = await composeInvalidSdJWT(sdJwtPayload, sdJwtRPayload);
 
       await expect(verifySDJWTandSDJWTR(invalidSdJwt, ISSUER.PUBLIC_KEY))
         .rejects.toThrow(
@@ -388,12 +378,4 @@ describe('Verify SD-JWT as Verifier', () => {
 
   // 5-3. Once all necessary claims have been verified, their values can be validated and used according to the requirements of the application. It MUST be ensured that all claims required for the application have been released.
 });
-
-
-
-
-
-
-
-
 

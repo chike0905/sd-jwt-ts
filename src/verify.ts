@@ -42,6 +42,7 @@ export const verifySDJWTandSDJWTR = async (sdJwtStr: string, IssuerPublicKey: Ke
   // 1. Determine if holder binding is to be checked for the SD-JWT. Refer to Section 7.6 for details.
   // NOTE: this process is implemented around validateSdJwtRelease() for 5-1
   // 2. Check that the presentation consists of six period-separated (.) elements; if holder binding is not required, the last element can be empty.
+  // NOTE: this process is implemented in separateJWTandSDJWTR()
 
   // 3. Separate the SD-JWT from the SD-JWT Release.
   const { sdJwt, sdJwtR } = separateJWTandSDJWTR(sdJwtStr);
@@ -53,8 +54,7 @@ export const verifySDJWTandSDJWTR = async (sdJwtStr: string, IssuerPublicKey: Ke
 
   // 5-1. If holder binding is required, validate the signature over the SD-JWT using the same steps as for the SD-JWT plus the following steps:
 
-  // TODO: tmp 
-  // Keys for SD-JWT-R is specified in sub_jwk in SD-JWT payload.
+  // TODO: tmp Keys for SD-JWT-R is specified in sub_jwk in SD-JWT payload.
   // If holderPublicKey is provided, override it.
   let boundedKey: KeyLike | undefined;
   if (sdJwtPayload.hasOwnProperty('sub_jwk'))
