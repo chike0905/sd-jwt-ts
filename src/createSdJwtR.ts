@@ -1,5 +1,5 @@
 import { decodeJwt, importJWK, JWK, jwtVerify, KeyLike, SignJWT, UnsecuredJWT } from "jose";
-import { SVC, SD_JWT_RELEASE } from "./types";
+import { SVC, SD_JWT_RELEASE, SD_RELEASE } from "./types";
 import { separateJWTandSVC } from "./utils";
 
 const composeSDJWTRPayload =
@@ -29,9 +29,6 @@ const composeSDJWTRPayload =
     }
     return sd_release
   }
-type SD_RELEASE = {
-  [key: string]: string | SD_RELEASE
-}
 
 
 export const createSDJWTRelease = async (
