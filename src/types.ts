@@ -1,5 +1,5 @@
 export type SD_JWTClaims = {
-  [propName: string]: unknown
+  [propName: string]: string | SD_JWTClaims
 };
 
 export type SD_DIGESTS = {

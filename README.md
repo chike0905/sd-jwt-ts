@@ -11,18 +11,22 @@ npm install git+ssh://git@github.com:chike0905/sd-jwt-ts.git
 ```
 
 ## Functions
-### async issueSDJWT(payload, IssuerPrivateKey, HolderPublicKey?, structured?): string
-- Issue an SD-JWT with SVC.
-- Params
-  - payload (`Object`): Claims.
-  - IssuerPrivateKey (`KeyLike`): Private Key for signing to SD-JWT.
-  - (Optional) HolderPublicKey (`KeyLike`): Public Key of expected Holder.
-    - When you provide this param, the SD-JWT includes the public key at `sub_jwk` claim.
-  - (Optional) structured (`boolean`): If the payload is structured, you keep the structure of the payload.
-    - If you do not use this flag, SD-JWT includes only the top-level claims and takes structured claims as a JSON-encoded string.
-- Output
-  - a string combined an SD-JWT and an SVC by `.` separator.
-- Example
+### async issueSDJWT(claims, issuerPrivateKey, holderPublicKey?, structured?): string
+Issue an SD-JWT with SVC.
+
+#### Params
+
+|            Name            |      Type      |                             Description                              |                                                             Note                                                             |
+| :------------------------: | :------------: | :------------------------------------------------------------------: | :--------------------------------------------------------------------------------------------------------------------------: |
+|           calims           | `SD_JWTClaims` |                                Claims                                |                                                                                                                              |
+|      issuerPrivateKey      |   `KeyLike`    |                  Private Key for signing to SD-JWT.                  |
+| (Optional) holderPublicKey |   `KeyLike`    |                    Public Key of expected Holder.                    |                     When you provide this param, the SD-JWT includes the public key at `sub_jwk` claim.                      |
+|   (Optional) structured    |   `boolean`    | If the payload is structured, you keep the structure of the payload. | If you do not use this flag, SD-JWT includes only the top-level claims and takes structured claims as a JSON-encoded string. |
+
+####  Output
+- a string combined an SD-JWT and an SVC by `.` separator.
+
+#### Example
 ```node
 const PAYLOAD = {
   "sub": "6c5c0a49-b589-431d-bae7-219122a9ec2c",
@@ -89,19 +93,20 @@ eyJhbGciOiJFUzI1NiJ9.eyJzZF9kaWdlc3RzIjp7InN1YiI6IlVHeU5NWUw3VEhCejdyeVlXNlpNSVB
 ```
 
 ### async createSDJWTwithRelease(sdJwtWithSVC, disclosedClaims, holderPrivateKey?): string
-- Create SD-JWT-Release from SD-JWT and SVC.
-- Params
-  - sdJwtWithSVC (`string`): SD-JWT and SVC in a combined format (output of `issueSDJWT()`).
-  - disclosedClaims (`string[]`): Array of a path of claims that a holder wants to disclose.
-    - Taking `sd_digest` as root, describe path comma-separated string.
-      - If you want to specify `region` in the example payload, you can describe `address.region`.
-      - TODO: Array
-  - (Optional) holderPrivateKey (`KeyLike`): a key for signing to SD-JWT-R.
-    - (NOT REQUIREMENT IN SPEC) If SD-JWT has a `sub_jwk` claim, a holder MUST provide privateKey for holder binding.
-- Output
-  - a string combined an SD-JWT and an SD-JWT-R by `.` separator.
+Create SD-JWT-Release from SD-JWT and SVC.
 
-- Example
+#### Params
+
+|            Name             |    Type    |                          Description                           |                                                                             Note                                                                             |
+| :-------------------------: | :--------: | :------------------------------------------------------------: | :----------------------------------------------------------------------------------------------------------------------------------------------------------: |
+|        sdJwtWithSVC         |  `string`  | SD-JWT and SVC in a combined format (output of `issueSDJWT()`) |                                                                                                                                                              |
+|       disclosedClaims       | `string[]` |   Array of a path of claims that a holder wants to disclose.   | Taking `sd_digest` as root, describe path comma-separated string. If you want to specify `region` in the example payload, you can describe `address.region`. |
+| (Optional) holderPrivateKey | `KeyLike`  |                 a key for signing to SD-JWT-R.                 |                       (NOT REQUIREMENT IN SPEC) If SD-JWT has a `sub_jwk` claim, a holder MUST provide privateKey for holder binding.                        |
+
+#### Output
+- a string combined an SD-JWT and an SD-JWT-R by `.` separator.
+
+#### Example
 ```node
 const sdJwt = await issueSDJWT(PAYLOAD, privKey, undefined, true);
 const sdJwtWithRelease = await createSDJWTwithRelease(sdJwt, ['address.region']);
@@ -121,25 +126,32 @@ eyJhbGciOiJFUzI1NiJ9.eyJzZF9kaWdlc3RzIjp7InN1YiI6IlVHeU5NWUw3VEhCejdyeVlXNlpNSVB
 ```
 
 ### async verifySDJWTandSVC(sdJwtWithSVC, issuerPublicKey): boolean
-- verify SD-JWT with SVC (Spec Section 6.1)
-- Params
-  - sdJwtWithSVC (`string`): SD-JWT and SVC in a combined format (output of `issueSDJWT()`).
-  - issuerPublicKey (`KeyLike`): a public key of the issuer.
-- Output
-  - verification result as boolean
+Verify SD-JWT with SVC (Spec Section 6.1)
+
+#### Params
+
+|      Name       |   Type    |                           Description                           | Note  |
+| :-------------: | :-------: | :-------------------------------------------------------------: | :---: |
+|  sdJwtWithSVC   | `string`  | SD-JWT and SVC in a combined format (output of `issueSDJWT()`). |       |
+| issuerPublicKey | `KeyLike` |                   a public key of the issuer.                   |       |
+
+#### Output
+Verification result as boolean
   
 ### async verifySDJWTandSDJWTR(sdJwtWithRelease, issuerPublicKey, holderPublicKey?): Object
-- verify SD-JWT with SD-JWT-R and get disclosed claims. (Spec Section 6.2)
-- Params
-  - sdJwtWithRelease (`string`): a string combined an SD-JWT and an SD-JWT-R (output of `createSDJWTwithRelease()`).
-  - issuerPrivateKey (`KeyLike`): a public key of the issuer.
-  - (Optional) holderPrivateKey? (`KeyLike`): a public key of the holder.
-    - NOTE: 
-      - If the SD-JWT has `sub_jwk` claim, the key in `sub_jwk` is utilized in the verification process of SD-JWT-R.
-      - Nevertheless, the `sub_jwk` is provided, if `holderPublicKey` is provided, the function utilizes the `holderPublicKey`, not `sub_jwk`.
-- Output
-  - An object includes disclosed claims
-- Example
+Verify SD-JWT with SD-JWT-R and get disclosed claims. (Spec Section 6.2)
+
+#### Params
+|            Name            |   Type    |                                     Description                                     |                                                                                                                        Note                                                                                                                         |
+| :------------------------: | :-------: | :---------------------------------------------------------------------------------: | :-------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------: |
+|      sdJwtWithRelease      | `string`  | a string combined an SD-JWT and an SD-JWT-R (output of `createSDJWTwithRelease()`). |                                                                                                                                                                                                                                                     |
+|      issuerPublicKey       | `KeyLike` |                             a public key of the issuer.                             |                                                                                                                                                                                                                                                     |
+| (Optional) holderPublicKey | `KeyLike` |                             a public key of the holder.                             | If the SD-JWT has `sub_jwk` claim, the key in `sub_jwk` is utilized in the verification process of SD-JWT-R. Nevertheless, the `sub_jwk` is provided, if `holderPublicKey` is provided, the function utilizes the `holderPublicKey`, not `sub_jwk`. |
+
+#### Output
+An object includes disclosed claims
+
+#### Example
 ```node
 const sdJwt = await issueSDJWT(PAYLOAD, privKey, undefined, true);
 const sdJwtWithRelease = await createSDJWTwithRelease(sdJwt, ['address.region']);

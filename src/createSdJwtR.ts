@@ -60,13 +60,13 @@ export const createSDJWTRelease = async (
 }
 
 export const createSDJWTwithRelease = async (
-  sdJwt: string,
-  discloseClaims: string[],
-  HolderPrivateKey?: KeyLike
+  sdJwtWithSVC: string,
+  disclosedClaims: string[],
+  holderPrivateKey?: KeyLike
 ): Promise<string> => {
-  const { svc, jwt } = separateJWTandSVC(sdJwt);
+  const { svc, jwt } = separateJWTandSVC(sdJwtWithSVC);
 
-  const release = await createSDJWTRelease(svc, discloseClaims, HolderPrivateKey);
+  const release = await createSDJWTRelease(svc, disclosedClaims, holderPrivateKey);
   // const encodedRelease = base64url.encode(JSON.stringify(release));
 
   // NOTE: Temporary implementation for holder binding 
@@ -74,7 +74,7 @@ export const createSDJWTwithRelease = async (
   // It is able to create unsigned SD-JWT-R even if the SD-JWT includes sub_jwk. 
   const jwtPayload = decodeJwt(jwt);
   let boundedKey: KeyLike;
-  if (jwtPayload.hasOwnProperty('sub_jwk') && HolderPrivateKey) {
+  if (jwtPayload.hasOwnProperty('sub_jwk') && holderPrivateKey) {
     boundedKey = await importJWK(jwtPayload.sub_jwk as JWK, 'ES256') as KeyLike;
     try {
       await jwtVerify(release, boundedKey);

@@ -1,4 +1,4 @@
-import { base64url, decodeJwt, JWTPayload, SignJWT } from 'jose';
+import { base64url, decodeJwt, exportJWK, JWTPayload, SignJWT } from 'jose';
 import * as crypto from 'crypto';
 
 import { createSDJWTwithRelease, SD_JWTClaims, SD_JWT_RELEASE, SVC } from "../src";
@@ -6,7 +6,7 @@ import { createSVCandSDDigests, issueSDJWT } from "../src/issue";
 import { PAYLOAD, importKeyPairForIssuerAndHolder, Entity } from './params';
 
 import { verifySDJWTandSDJWTR, verifySDJWTandSVC } from '../src/verify';
-import { SD_RELEASE } from '../src/types';
+import { SD_DIGESTS, SD_RELEASE } from '../src/types';
 
 
 let ISSUER: Entity;
@@ -269,7 +269,12 @@ describe('Verify SD-JWT as Verifier', () => {
     });
 
     const composeInvalidSdJWT = async (sdJwtPayload: SD_JWTClaims, sdJwtRPayload: SVC) => {
-      const invalidJwt = await new SignJWT(sdJwtPayload)
+      const invalidJwt = await new SignJWT(
+        {
+          sd_digests: sdJwtPayload,
+          hash_alg: 'sha-256',
+          sub_jwk: await exportJWK(HOLDER.PUBLIC_KEY)
+        })
         .setProtectedHeader({ alg: 'ES256' }) // TODO: tmp support only ES256
         .sign(ISSUER.PRIVATE_KEY);
       const invalidJwtSdR = await new SignJWT(sdJwtRPayload)
@@ -284,7 +289,7 @@ describe('Verify SD-JWT as Verifier', () => {
     // 5-2-4. Store the second of the two values.
     it('Claims in SD-JWT-R are not JSON-encoded.', async () => {
       const sdJwt = sdJwtWithRelease.split('.').splice(0, 3).join('.');
-      const sdJwtPayload = decodeJwt(sdJwt);
+      const sdJwtPayload = decodeJwt(sdJwt).sd_digests as SD_JWTClaims;
       const sdJwtR = sdJwtWithRelease.split('.').splice(3).join('.');
       const sdJwtRPayload = decodeJwt(sdJwtR) as SD_JWT_RELEASE;
 
@@ -292,7 +297,7 @@ describe('Verify SD-JWT as Verifier', () => {
       const hashOfClaim = base64url.encode(crypto.createHash('sha256')
         .update(sdJwtRPayload.sd_release.family_name as string).digest());
       // @ts-ignore
-      sdJwtPayload.sd_digests.family_name = hashOfClaim;
+      sdJwtPayload.family_name = hashOfClaim;
 
       const invalidSdJwt = await composeInvalidSdJWT(sdJwtPayload, sdJwtRPayload);
 
@@ -304,7 +309,7 @@ describe('Verify SD-JWT as Verifier', () => {
 
     it('Claims in SD-JWT-R are not JSON-encoded array.', async () => {
       const sdJwt = sdJwtWithRelease.split('.').splice(0, 3).join('.');
-      const sdJwtPayload = decodeJwt(sdJwt);
+      const sdJwtPayload = decodeJwt(sdJwt).sd_digests as SD_DIGESTS
       const sdJwtR = sdJwtWithRelease.split('.').splice(3).join('.');
       const sdJwtRPayload = decodeJwt(sdJwtR) as SD_JWT_RELEASE;
 
@@ -313,7 +318,7 @@ describe('Verify SD-JWT as Verifier', () => {
       const hashOfClaim = base64url.encode(crypto.createHash('sha256')
         .update(sdJwtRPayload.sd_release.family_name as string).digest());
       // @ts-ignore
-      sdJwtPayload.sd_digests.family_name = hashOfClaim;
+      sdJwtPayload.family_name = hashOfClaim;
 
       const invalidSdJwt = await composeInvalidSdJWT(sdJwtPayload, sdJwtRPayload);
 
@@ -325,7 +330,7 @@ describe('Verify SD-JWT as Verifier', () => {
 
     it('Claims in SD-JWT-R are not JSON-encoded of exactly two values.', async () => {
       const sdJwt = sdJwtWithRelease.split('.').splice(0, 3).join('.');
-      const sdJwtPayload = decodeJwt(sdJwt);
+      const sdJwtPayload = decodeJwt(sdJwt).sd_digests as SD_DIGESTS;
       const sdJwtR = sdJwtWithRelease.split('.').splice(3).join('.');
       const sdJwtRPayload = decodeJwt(sdJwtR) as SD_JWT_RELEASE;
 
@@ -334,7 +339,7 @@ describe('Verify SD-JWT as Verifier', () => {
       const hashOfClaim = base64url.encode(crypto.createHash('sha256')
         .update(sdJwtRPayload.sd_release.family_name as string).digest());
       // @ts-ignore
-      sdJwtPayload.sd_digests.family_name = hashOfClaim;
+      sdJwtPayload.family_name = hashOfClaim;
 
       const invalidSdJwt = await composeInvalidSdJWT(sdJwtPayload, sdJwtRPayload);
 

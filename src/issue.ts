@@ -10,7 +10,7 @@ const SALT_BYTE_SIZE = 256 / 8;
 // It might be useful that issuer can select separated format (jwt and json format SVC?)
 export const issueSDJWT = async (
   claims: SD_JWTClaims,
-  privateKey: KeyLike,
+  issuerPrivateKey: KeyLike,
   holderPublicKey?: KeyLike,
   structured: boolean = false
 ):
@@ -28,7 +28,7 @@ export const issueSDJWT = async (
 
   const jwt = await new jose.SignJWT(sdJWTPayload)
     .setProtectedHeader({ alg: 'ES256' }) // TODO: tmp support only ES256
-    .sign(privateKey);
+    .sign(issuerPrivateKey);
 
   const encodedSVC = base64url.encode(JSON.stringify(svc));
 

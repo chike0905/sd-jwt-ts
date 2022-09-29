@@ -41,12 +41,12 @@ const validateHashInSdDigestAndSdRelease =
   }
 
 // TODO: tmp support combined single string format for SD-JWT and SVC 
-export const verifySDJWTandSVC = async (sdJwtWithSVC: string, publicKey: KeyLike):
+export const verifySDJWTandSVC = async (sdJwtWithSVC: string, issuerPublicKey: KeyLike):
   Promise<boolean> => {
   const { svc, jwt } = separateJWTandSVC(sdJwtWithSVC);
 
   // 4. Validate the SD-JWT:
-  const sdJwtPayload = await validateSdJWT(jwt, publicKey);
+  const sdJwtPayload = await validateSdJWT(jwt, issuerPublicKey);
 
   // SVC format validation
   if (!svc.sd_release)
@@ -108,7 +108,7 @@ const composeDiscloseClaimsFromSDRelease = (sd_release: SD_RELEASE): DISCLOSED_C
 };
 
 // 6.2 Verification by the Verifier when Receiving SD-JWT and SD-JWT-R
-export const verifySDJWTandSDJWTR = async (sdJwtStr: string, IssuerPublicKey: KeyLike, holderPublicKey?: KeyLike):
+export const verifySDJWTandSDJWTR = async (sdJwtWithRelease: string, issuerPublicKey: KeyLike, holderPublicKey?: KeyLike):
   Promise<{}> => {
   // 1. Determine if holder binding is to be checked for the SD-JWT. Refer to Section 7.6 for details.
   // NOTE: this process is implemented around validateSdJwtRelease() for 5-1
@@ -116,10 +116,10 @@ export const verifySDJWTandSDJWTR = async (sdJwtStr: string, IssuerPublicKey: Ke
   // NOTE: this process is implemented in separateJWTandSDJWTR()
 
   // 3. Separate the SD-JWT from the SD-JWT Release.
-  const { sdJwt, sdJwtR } = separateJWTandSDJWTR(sdJwtStr);
+  const { sdJwt, sdJwtR } = separateJWTandSDJWTR(sdJwtWithRelease);
 
   // 4. Validate the SD-JWT:
-  const sdJwtPayload = await validateSdJWT(sdJwt, IssuerPublicKey);
+  const sdJwtPayload = await validateSdJWT(sdJwt, issuerPublicKey);
 
   // 5. Validate the SD-JWT Release:
 
