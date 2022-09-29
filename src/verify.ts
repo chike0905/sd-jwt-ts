@@ -61,6 +61,52 @@ export const verifySDJWTandSVC = async (sdJwtWithSVC: string, publicKey: KeyLike
   return true;
 };
 
+const checkClaimsInSDReleaseIncludedInSDDigests =
+  (sd_digests: SD_DIGESTS, sd_release: SD_RELEASE) => {
+    Object.keys(sd_release).map((key) => {
+      if (!sd_digests[key])
+        throw new Error('SD-JWT does not includes claims in the SD-JWT-R.');
+      // @ts-ignore
+      if (sd_release[key] instanceof Object)
+        checkClaimsInSDReleaseIncludedInSDDigests(
+          sd_digests[key] as SD_DIGESTS,
+          sd_release[key] as SD_RELEASE
+        )
+    });
+  }
+
+type DISCLOSED_CLAIM = {
+  [key: string]: string | DISCLOSED_CLAIM
+}
+
+const composeDiscloseClaimsFromSDRelease = (sd_release: SD_RELEASE): DISCLOSED_CLAIM => {
+  let disclosedClaims: DISCLOSED_CLAIM = {};
+  Object.keys(sd_release).map((key) => {
+    if (sd_release[key] instanceof Object) {
+      disclosedClaims[key] = composeDiscloseClaimsFromSDRelease(sd_release[key] as SD_RELEASE);
+    } else {
+      let claimArray;
+      try {
+        claimArray = JSON.parse(sd_release[key] as string);
+      } catch (e) {
+        throw new Error('Claims in SD-JWT-R are not JSON-encoded.');
+      }
+
+      if (!Array.isArray(claimArray))
+        throw new Error('Claims in SD-JWT-R are not JSON-encoded array.');
+
+      if (claimArray.length !== 2)
+        throw new Error('Claims in SD-JWT-R are not JSON-encoded of exactly two values.');
+      Object.defineProperty(disclosedClaims, key, {
+        value: claimArray[1],
+        enumerable: true,
+      });
+
+    }
+  });
+  return disclosedClaims;
+};
+
 // 6.2 Verification by the Verifier when Receiving SD-JWT and SD-JWT-R
 export const verifySDJWTandSDJWTR = async (sdJwtStr: string, IssuerPublicKey: KeyLike, holderPublicKey?: KeyLike):
   Promise<{}> => {
@@ -90,44 +136,23 @@ export const verifySDJWTandSDJWTR = async (sdJwtStr: string, IssuerPublicKey: Ke
   const sdJwtReleasePayload = await validateSdJwtRelease(sdJwtR, boundedKey);
 
   // 5-2. For each claim in the SD-JWT Release:
+  checkClaimsInSDReleaseIncludedInSDDigests(
+    sdJwtPayload.sd_digests as SD_DIGESTS,
+    sdJwtReleasePayload.sd_release as SD_RELEASE
+  );
   const disclosedClaimsInRelease = (sdJwtReleasePayload as SD_JWT_RELEASE).sd_release;
-  Object.keys(disclosedClaimsInRelease).map((key) => {
-    if (!(sdJwtPayload.sd_digests as SD_DIGESTS)[key]) // TODO: Structured
-      throw new Error('SD-JWT does not includes claims in the SD-JWT-R.')
-  });
 
   // 5-2-2. Compute the base64url-encoded hash of a claim revealed from the Holder using the claim value and the salt included in the SD-JWT-R and the hash_alg in SD-JWT.
   // 5-2-3. Compare the hash digests computed in the previous step with the one of the same claim in the SD-JWT. Accept the claim only when the two hash digests match.
-  Object.keys(disclosedClaimsInRelease).map((key) => {
-    // TODO: Structured
-    const hashInSdJwt = (sdJwtPayload.sd_digests as SD_DIGESTS)[key];
-    const hashOfClaim = base64url.encode(crypto.createHash('sha256')
-      .update(disclosedClaimsInRelease[key] as string).digest());
-    if (hashInSdJwt !== hashOfClaim)
-      throw new Error('Hash value of claims in SD-JWT-R does not match with claims in SD-JWT.');
-  });
+  validateHashInSdDigestAndSdRelease(
+    sdJwtPayload.sd_digests as SD_DIGESTS,
+    sdJwtReleasePayload.sd_release as SD_RELEASE
+  );
 
   // 5-2-4. Ensure that the claim value in the SD-JWT-R is a JSON-encoded array of exactly two values.
   // 5-2-4. Store the second of the two values.
-  let payload = {};
-  Object.keys(disclosedClaimsInRelease).map((key) => {
-    let claimArray;
-    try {
-      claimArray = JSON.parse(disclosedClaimsInRelease[key] as string);
-    } catch (e) {
-      throw new Error('Claims in SD-JWT-R are not JSON-encoded.');
-    }
-
-    if (!Array.isArray(claimArray))
-      throw new Error('Claims in SD-JWT-R are not JSON-encoded array.');
-
-    if (claimArray.length !== 2)
-      throw new Error('Claims in SD-JWT-R are not JSON-encoded of exactly two values.');
-    Object.defineProperty(payload, key, {
-      value: claimArray[1],
-      enumerable: true,
-    });
-  });
+  let payload =
+    composeDiscloseClaimsFromSDRelease(sdJwtReleasePayload.sd_release as SD_RELEASE);
 
   return payload;
 }

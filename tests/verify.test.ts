@@ -1,4 +1,4 @@
-import { base64url, decodeJwt, SignJWT } from 'jose';
+import { base64url, decodeJwt, JWTPayload, SignJWT } from 'jose';
 import * as crypto from 'crypto';
 
 import { createSDJWTwithRelease, SD_JWTClaims, SD_JWT_RELEASE, SVC } from "../src";
@@ -264,7 +264,7 @@ describe('Verify SD-JWT as Verifier', () => {
 
       await expect(verifySDJWTandSDJWTR(invalidSdJwt, ISSUER.PUBLIC_KEY))
         .rejects.toThrow(
-          new Error('Hash value of claims in SD-JWT-R does not match with claims in SD-JWT.')
+          new Error('sd_digest does not match with hash of sd_release.')
         );
     });
 
@@ -386,21 +386,69 @@ describe('Structured SD-JWT', () => {
     TEST_SD_JWT = await issueSDJWT(PAYLOAD, ISSUER.PRIVATE_KEY, HOLDER.PUBLIC_KEY, true);
     TEST_SVC = JSON.parse(base64url.decode(TEST_SD_JWT.split('.')[3]).toString()) as SVC;
   });
-  it('Verify SD-JWT with SVC', async () => {
-    const result = await verifySDJWTandSVC(TEST_SD_JWT, ISSUER.PUBLIC_KEY);
-    expect(result).toBe(true);
+
+  describe('Verify by Holder', () => {
+    it('Verify SD-JWT with SVC', async () => {
+      const result = await verifySDJWTandSVC(TEST_SD_JWT, ISSUER.PUBLIC_KEY);
+      expect(result).toBe(true);
+    });
+    it('keys in sd_digests and in sd_release of SVC does not match', async () => {
+      const separated = TEST_SD_JWT.split('.');
+
+      // @ts-ignore
+      delete TEST_SVC.sd_release.address['street_address'];
+      const dummySVC = base64url.encode(JSON.stringify(TEST_SVC));
+      const invalidSdJwt = separated.splice(0, 3).join('.') + '.' + dummySVC;
+
+      await expect(() => verifySDJWTandSVC(invalidSdJwt, ISSUER.PUBLIC_KEY))
+        .rejects.toThrow(
+          new Error('Keys in sd_digests and in sd_release of SVC does not match.')
+        );
+    });
   });
-  it('keys in sd_digests and in sd_release of SVC does not match', async () => {
-    const separated = TEST_SD_JWT.split('.');
 
-    // @ts-ignore
-    delete TEST_SVC.sd_release.address['street_address'];
-    const dummySVC = base64url.encode(JSON.stringify(TEST_SVC));
-    const invalidSdJwt = separated.splice(0, 3).join('.') + '.' + dummySVC;
+  describe('Verify by Verifier', () => {
+    let sdJwtWithRelease: string;
+    beforeEach(async () => {
+      TEST_SD_JWT = await issueSDJWT(PAYLOAD, ISSUER.PRIVATE_KEY, HOLDER.PUBLIC_KEY, true);
+      TEST_SVC = JSON.parse(base64url.decode(TEST_SD_JWT.split('.')[3]).toString()) as SVC;
 
-    await expect(() => verifySDJWTandSVC(invalidSdJwt, ISSUER.PUBLIC_KEY))
-      .rejects.toThrow(
-        new Error('Keys in sd_digests and in sd_release of SVC does not match.')
+      const discloseClaims = ['given_name', 'address.street_address'];
+
+      sdJwtWithRelease =
+        await createSDJWTwithRelease(TEST_SD_JWT, discloseClaims, HOLDER.PRIVATE_KEY);
+    });
+
+    it('Verify SD-JWT with SD-JWT-R', async () => {
+      const result = await verifySDJWTandSDJWTR(sdJwtWithRelease, ISSUER.PUBLIC_KEY);
+      expect(result).toStrictEqual(
+        {
+          "given_name": "John",
+          "address": {
+            "street_address": "123 Main St"
+          },
+        }
       );
+    });
+
+    it('SD-JWT does not includes claims in the SD-JWT-R.', async () => {
+      const separated = sdJwtWithRelease.split('.');
+
+      const sdJwtR = separated.splice(3).join('.');
+      const payload = decodeJwt(sdJwtR) as any;
+      payload.sd_release['address']['dummy'] = 'This is dummy';
+      const dummySDJWTR = await new SignJWT(payload as JWTPayload)
+        .setProtectedHeader({ alg: 'ES256' })
+        .sign(HOLDER.PRIVATE_KEY);
+      // @ts-ignore
+      const invalidSdJwt =
+        sdJwtWithRelease.split('.').splice(0, 3).join('.') + '.' + dummySDJWTR;
+
+      await expect(() => verifySDJWTandSDJWTR(invalidSdJwt, ISSUER.PUBLIC_KEY))
+        .rejects.toThrow(
+          new Error('SD-JWT does not includes claims in the SD-JWT-R.')
+        );
+    });
   });
+
 });
