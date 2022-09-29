@@ -133,3 +133,71 @@ it('Create not-holder-bounded SD-JWT with Release without private key', async ()
 
   await validateSdJWTwithRelease(sdJwtWithRelease, discloseClaims, false);
 });
+
+it('Try to create SD-JWT-R with property is not included in SVC', async () => {
+  const discloseClaims = ['undefined'];
+  await expect(createSDJWTRelease(TEST_SVC, discloseClaims, HOLDER.PRIVATE_KEY))
+    .rejects.toThrow(
+      Error('Specified claim is not in SVC.')
+    );
+})
+
+
+describe('Structured SD-JWT', () => {
+  beforeEach(async () => {
+    TEST_SD_JWT = await issueSDJWT(PAYLOAD, ISSUER.PRIVATE_KEY, HOLDER.PUBLIC_KEY, true);
+    TEST_SVC = JSON.parse(base64url.decode(TEST_SD_JWT.split('.')[3]).toString());
+  });
+  it('Create SD-JWT-R with whole structured item', async () => {
+    const discloseClaims = ['given_name', 'family_name', 'address'];
+
+    const sdJwtRelease: string = await createSDJWTRelease(TEST_SVC, discloseClaims, HOLDER.PRIVATE_KEY);
+
+    const { payload } = await jwtVerify(sdJwtRelease, HOLDER.PUBLIC_KEY);
+    discloseClaims.map((item) => {
+      expect(payload.sd_release).toHaveProperty(item);
+      // @ts-ignore
+      if (payload.sd_release[item] instanceof Object)
+        // @ts-ignore
+        expect(payload.sd_release[item]).toStrictEqual(TEST_SVC.sd_release[item]);
+      else
+        // @ts-ignore
+        expect(payload.sd_release[item]).toBe(TEST_SVC.sd_release[item]);
+    });
+  });
+
+
+  const validateStructuredSDJWTR =
+    (svc: Object, sdJwtRelease: Object, claimPath: string) => {
+      if (claimPath.split('.').length >= 2) {
+        const toplevelProperty = claimPath.split('.')[0];
+        const innerPath = claimPath.split('.').splice(1).join('.');
+        expect(sdJwtRelease).toHaveProperty(toplevelProperty);
+        validateStructuredSDJWTR(
+          svc[toplevelProperty as keyof Object],
+          sdJwtRelease[toplevelProperty as keyof Object],
+          innerPath
+        )
+      } else {
+        expect(svc[claimPath as keyof Object]).toBe(sdJwtRelease[claimPath as keyof Object]);
+      }
+    }
+
+  it('Create SD-JWT-R with some of structured item', async () => {
+    const discloseClaims = ['address.street_address'];
+
+    const sdJwtRelease: string = await createSDJWTRelease(TEST_SVC, discloseClaims, HOLDER.PRIVATE_KEY);
+
+    const { payload } = await jwtVerify(sdJwtRelease, HOLDER.PUBLIC_KEY);
+    discloseClaims.map((item) => {
+      validateStructuredSDJWTR(TEST_SVC.sd_release, payload.sd_release as Object, item)
+    });
+  });
+  it('Try to create SD-JWT-R with property is not included in SVC', async () => {
+    const discloseClaims = ['address.undefined'];
+    await expect(createSDJWTRelease(TEST_SVC, discloseClaims, HOLDER.PRIVATE_KEY))
+      .rejects.toThrow(
+        Error('Specified claim is not in SVC.')
+      );
+  })
+});

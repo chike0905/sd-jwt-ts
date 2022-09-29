@@ -2,6 +2,38 @@ import { decodeJwt, importJWK, JWK, jwtVerify, KeyLike, SignJWT, UnsecuredJWT } 
 import { SVC, SD_JWT_RELEASE } from "./types";
 import { separateJWTandSVC } from "./utils";
 
+const composeSDJWTRPayload =
+  (claimPath: string, svc: Object, sd_release: SD_RELEASE): SD_RELEASE => {
+    if (claimPath.split('.').length >= 2) {
+      const toplevelProperty = claimPath.split('.')[0];
+      const innerPath = claimPath.split('.').splice(1).join('.');
+
+      Object.defineProperty(sd_release, toplevelProperty, {
+        value: {},
+        enumerable: true,
+        writable: true
+      });
+      sd_release[toplevelProperty] = composeSDJWTRPayload(
+        innerPath,
+        svc[toplevelProperty as keyof Object],
+        sd_release[toplevelProperty] as SD_RELEASE
+      )
+    } else {
+      if (svc[claimPath as keyof Object] === undefined)
+        throw new Error('Specified claim is not in SVC.');
+
+      Object.defineProperty(sd_release, claimPath, {
+        value: svc[claimPath as keyof Object],
+        enumerable: true,
+      });
+    }
+    return sd_release
+  }
+type SD_RELEASE = {
+  [key: string]: string | SD_RELEASE
+}
+
+
 export const createSDJWTRelease = async (
   svc: SVC,
   discloseClaims: string[],
@@ -11,12 +43,11 @@ export const createSDJWTRelease = async (
     sd_release: {}
   };
 
+  let sd_release: SD_RELEASE = {};
   discloseClaims.map((item) => {
-    Object.defineProperty(payload.sd_release, item, {
-      value: svc.sd_release[item],
-      enumerable: true,
-    });
+    sd_release = composeSDJWTRPayload(item, svc.sd_release, sd_release);
   });
+  payload.sd_release = sd_release;
 
   // NOTE: tmp SD-JWT-R is JWT (JWS that has encoded json as the payload)
   let sdJwtRelease: string
