@@ -6,7 +6,9 @@ This is an implementation of [SD-JWT](https://www.ietf.org/archive/id/draft-fett
 **NOTE: THIS IMPLEMENTATION IS FOR EXPERIMENTAL PURPOSES. DO NOT USE PRODUCTION PURPOSES.**
 
 ## Install
-TBA
+```
+npm install git+ssh://git@github.com:chike0905/sd-jwt-ts.git
+```
 
 ## Functions
 ### async issueSDJWT(payload, IssuerPrivateKey, HolderPublicKey?, structured?): string
