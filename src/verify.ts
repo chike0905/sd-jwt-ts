@@ -1,12 +1,44 @@
 import { base64url, importJWK, JWK, JWTPayload, jwtVerify, KeyLike, UnsecuredJWT } from "jose";
 import * as crypto from 'crypto';
-import { SD_DIGESTS, SD_JWT_RELEASE, SVC } from "./types";
+import { SD_DIGESTS, SD_JWT_RELEASE, SD_RELEASE, SVC } from "./types";
 import { separateJWTandSDJWTR, separateJWTandSVC } from "./utils";
 
 // ref: https://www.iana.org/assignments/named-information/named-information.xhtml
 // Accessed 2022.09.22
 // TODO: make enum for hash name string
 const HASH_NAME_STRING = ['Reserved', 'sha-256', 'sha-256-128', 'sha-256-120', 'sha-256-96', 'sha-256-64', 'sha-256-32', 'sha-384', 'sha-512', 'sha3-224', 'sha3-256', 'sha3-384', 'sha3-512', 'Unassigned', 'Reserved', 'Unassigned', 'blake2s-256', 'blake2b-256', 'blake2b-512', 'k12-256', 'k12-512'];
+
+const validateMatchSdDigestAndSdRelease =
+  (sd_digests: SD_DIGESTS, sd_release: SD_RELEASE) => {
+    Object.keys(sd_digests).map((key) => {
+      if (!sd_release[key])
+        throw new Error('Keys in sd_digests and in sd_release of SVC does not match.');
+      // @ts-ignore
+      if (sd_digests[key] instanceof Object)
+        validateMatchSdDigestAndSdRelease(
+          sd_digests[key] as SD_DIGESTS,
+          sd_release[key] as SD_RELEASE
+        )
+    });
+  }
+
+const validateHashInSdDigestAndSdRelease =
+  (sd_digests: SD_DIGESTS, sd_release: SD_RELEASE) => {
+    Object.keys(sd_release).map((key) => {
+      // @ts-ignore
+      if (sd_digests[key] instanceof Object) {
+        validateHashInSdDigestAndSdRelease(
+          sd_digests[key] as SD_DIGESTS,
+          sd_release[key] as SD_RELEASE
+        )
+      } else {
+        const hashOfSdRelease = base64url.encode(crypto.createHash('sha256')
+          .update(sd_release[key] as string).digest());
+        if (sd_digests[key] !== hashOfSdRelease)
+          throw new Error('sd_digest does not match with hash of sd_release.');
+      }
+    });
+  }
 
 // TODO: tmp support combined single string format for SD-JWT and SVC 
 export const verifySDJWTandSVC = async (sdJwtWithSVC: string, publicKey: KeyLike):
@@ -20,18 +52,11 @@ export const verifySDJWTandSVC = async (sdJwtWithSVC: string, publicKey: KeyLike
   if (!svc.sd_release)
     throw new Error('A SD-JWT Salt/Value Container (SVC) is a JSON object containing at least the top-level property sd_release. ')
 
-  // @ts-ignore
-  if (!strArrayEqual(Object.keys(sdJwtPayload.sd_digests), Object.keys(svc.sd_release)))
-    throw new Error('Keys in sd_digests and sd_release of SVC does not match.');
+  // Validation of match between keys in sd_digest and in sd_release
+  validateMatchSdDigestAndSdRelease(sdJwtPayload.sd_digests as SD_DIGESTS, svc.sd_release);
 
   // Validation of match between sd_digest and hash of sd_release
-  // @ts-ignore
-  Object.keys(sdJwtPayload.sd_digests).map((key) => {
-    const hashOfSdRelease = base64url.encode(crypto.createHash('sha256')
-      .update(svc.sd_release[key] as string).digest());
-    if ((sdJwtPayload.sd_digests as SD_DIGESTS)[key] !== hashOfSdRelease)
-      throw new Error('sd_digest does not match with hash of sd_release.');
-  });
+  validateHashInSdDigestAndSdRelease(sdJwtPayload.sd_digests as SD_DIGESTS, svc.sd_release);
 
   return true;
 };

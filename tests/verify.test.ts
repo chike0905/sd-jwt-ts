@@ -6,6 +6,7 @@ import { createSVCandSDDigests, issueSDJWT } from "../src/issue";
 import { PAYLOAD, importKeyPairForIssuerAndHolder, Entity } from './params';
 
 import { verifySDJWTandSDJWTR, verifySDJWTandSVC } from '../src/verify';
+import { SD_RELEASE } from '../src/types';
 
 
 let ISSUER: Entity;
@@ -107,7 +108,7 @@ describe('Verify SD-JWT as holder', () => {
 
     await expect(() => verifySDJWTandSVC(invalidSdJwt, ISSUER.PUBLIC_KEY))
       .rejects.toThrow(
-        new Error('Keys in sd_digests and sd_release of SVC does not match.')
+        new Error('Keys in sd_digests and in sd_release of SVC does not match.')
       );
   });
 
@@ -379,3 +380,27 @@ describe('Verify SD-JWT as Verifier', () => {
   // 5-3. Once all necessary claims have been verified, their values can be validated and used according to the requirements of the application. It MUST be ensured that all claims required for the application have been released.
 });
 
+describe('Structured SD-JWT', () => {
+  let TEST_SVC: SVC;
+  beforeEach(async () => {
+    TEST_SD_JWT = await issueSDJWT(PAYLOAD, ISSUER.PRIVATE_KEY, HOLDER.PUBLIC_KEY, true);
+    TEST_SVC = JSON.parse(base64url.decode(TEST_SD_JWT.split('.')[3]).toString()) as SVC;
+  });
+  it('Verify SD-JWT with SVC', async () => {
+    const result = await verifySDJWTandSVC(TEST_SD_JWT, ISSUER.PUBLIC_KEY);
+    expect(result).toBe(true);
+  });
+  it('keys in sd_digests and in sd_release of SVC does not match', async () => {
+    const separated = TEST_SD_JWT.split('.');
+
+    // @ts-ignore
+    delete TEST_SVC.sd_release.address['street_address'];
+    const dummySVC = base64url.encode(JSON.stringify(TEST_SVC));
+    const invalidSdJwt = separated.splice(0, 3).join('.') + '.' + dummySVC;
+
+    await expect(() => verifySDJWTandSVC(invalidSdJwt, ISSUER.PUBLIC_KEY))
+      .rejects.toThrow(
+        new Error('Keys in sd_digests and in sd_release of SVC does not match.')
+      );
+  });
+});
