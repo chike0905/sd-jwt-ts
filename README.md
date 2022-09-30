@@ -7,7 +7,7 @@ This is an implementation of [SD-JWT](https://www.ietf.org/archive/id/draft-fett
 
 ## Install
 ```
-npm install git+ssh://git@github.com:chike0905/sd-jwt-ts.git
+npm install @chike0905/sd-jwt-ts
 ```
 
 ## Functions
