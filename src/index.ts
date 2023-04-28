@@ -1,6 +1,6 @@
 import { issueSDJWT, createSVCandSDDigests } from "./issue";
 import { verifySDJWTandSVC, verifySDJWTandSDJWTR } from "./verify";
-import { createSDJWTwithRelease } from "./createSdJwtR";
+import { createSDJWTwithRelease } from "./presentation";
 import { SD_DIGESTS, SVC, SD_JWTClaims, SD_JWT_RELEASE } from "./types";
 
 export {

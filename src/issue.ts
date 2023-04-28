@@ -3,7 +3,48 @@ import { base64url, KeyLike } from 'jose';
 import * as crypto from 'crypto';
 
 import { SD_DIGESTS, SD_JWTClaims, SVC } from './types';
+import { createDisclosure, hashDisclosure } from './disclosures';
 
+
+export const issueSDJWTinCombinedFormat = async (
+  payload: SD_JWTClaims,
+  issuerPrivateKey: KeyLike,
+  holderPublicKey?: KeyLike,
+): Promise<string> => {
+
+  // Create Disclosures
+  const disclosures = Object.keys(payload).map((key: string) => {
+    return createDisclosure(key, payload[key]);
+  });
+
+  // Create SD-JWT Payload
+  const _sd = disclosures.map((disclosure: string) => { return hashDisclosure(disclosure) });
+  // Sort digest to hide the original order of the claims in the array.
+  let collator = new Intl.Collator('en');
+  _sd.sort(collator.compare);
+
+  const sdJWTPayload = {
+    _sd,
+    _sd_alg: 'sha-256' // TODO: tmp support only sha-256
+  };
+
+  if (holderPublicKey) {
+    const sub_jwk = await jose.exportJWK(holderPublicKey);
+    Object.defineProperty(sdJWTPayload, 'cnf', { value: sub_jwk, enumerable: true });
+  }
+
+  // Sign to SD-JWT
+  const jwt = await new jose.SignJWT(sdJWTPayload)
+    .setProtectedHeader({ alg: 'ES256' }) // TODO: tmp support only ES256
+    .sign(issuerPrivateKey);
+
+
+  const sdJWTCombined = `${jwt}~${disclosures.join('~')}`;
+
+  return sdJWTCombined;
+};
+
+// OLD
 const SALT_BYTE_SIZE = 256 / 8;
 
 // TODO: Now this returns combined format as single string (jwt + base64url encoded SVC) 
@@ -15,26 +56,27 @@ export const issueSDJWT = async (
   structured: boolean = false
 ):
   Promise<string> => {
-  const { svc, sd_digests } = createSVCandSDDigests(claims, structured);
+  return 'Test';
+  // const { svc, sd_digests } = createSVCandSDDigests(claims, structured);
 
-  const sdJWTPayload = {
-    sd_digests,
-    hash_alg: 'sha-256' // TODO: tmp support only sha-256
-  };
-  if (holderPublicKey) {
-    const sub_jwk = await jose.exportJWK(holderPublicKey);
-    Object.defineProperty(sdJWTPayload, 'sub_jwk', { value: sub_jwk, enumerable: true });
-  }
+  // const sdJWTPayload = {
+  //   sd_digests,
+  //   hash_alg: 'sha-256' // TODO: tmp support only sha-256
+  // };
+  // if (holderPublicKey) {
+  //   const sub_jwk = await jose.exportJWK(holderPublicKey);
+  //   Object.defineProperty(sdJWTPayload, 'sub_jwk', { value: sub_jwk, enumerable: true });
+  // }
 
-  const jwt = await new jose.SignJWT(sdJWTPayload)
-    .setProtectedHeader({ alg: 'ES256' }) // TODO: tmp support only ES256
-    .sign(issuerPrivateKey);
+  // const jwt = await new jose.SignJWT(sdJWTPayload)
+  //   .setProtectedHeader({ alg: 'ES256' }) // TODO: tmp support only ES256
+  //   .sign(issuerPrivateKey);
 
-  const encodedSVC = base64url.encode(JSON.stringify(svc));
+  // const encodedSVC = base64url.encode(JSON.stringify(svc));
 
-  const sd_jwt = jwt + '.' + encodedSVC;
+  // const sd_jwt = jwt + '.' + encodedSVC;
 
-  return sd_jwt;
+  // return sd_jwt;
 };
 
 export const createSVCandSDDigests = (

@@ -1,7 +1,27 @@
 import { decodeJwt, importJWK, JWK, jwtVerify, KeyLike, SignJWT, UnsecuredJWT } from "jose";
-import { SVC, SD_JWT_RELEASE, SD_RELEASE } from "./types";
+import { SVC, SD_JWT_RELEASE, SD_RELEASE, HolderBinding } from "./types";
 import { separateJWTandSVC } from "./utils";
 
+
+
+
+export const createPresentation = async (
+  sdJWT: string,
+  disclosures: Array<string>,
+  holderBinding?: HolderBinding
+): Promise<string> => {
+  let holderBindingJWT = ''
+  if (holderBinding) {
+    holderBindingJWT = await new SignJWT(holderBinding?.claims)
+      .setProtectedHeader({ alg: 'ES256' }) // TODO: tmp support only ES256
+      .sign(holderBinding.holderKey);
+  }
+
+  const presentation = `${sdJWT}~${disclosures.join('~')}~${holderBindingJWT}`;
+  return presentation;
+};
+
+// OLD
 const composeSDJWTRPayload =
   (claimPath: string, svc: Object, sd_release: SD_RELEASE): SD_RELEASE => {
     if (claimPath.split('.').length >= 2) {

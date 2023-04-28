@@ -1,3 +1,5 @@
+import { KeyLike } from "jose";
+
 export type SD_JWTClaims = {
   [propName: string]: string | SD_JWTClaims
 };
@@ -15,3 +17,11 @@ export type SD_RELEASE = {
 }
 
 export type SD_JWT_RELEASE = SVC;
+
+export type HolderBinding = {
+  holderKey: KeyLike,
+  claims: {
+    aud: string,
+    nonce: string
+  }
+}

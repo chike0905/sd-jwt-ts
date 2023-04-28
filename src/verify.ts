@@ -8,6 +8,12 @@ import { separateJWTandSDJWTR, separateJWTandSVC } from "./utils";
 // TODO: make enum for hash name string
 const HASH_NAME_STRING = ['Reserved', 'sha-256', 'sha-256-128', 'sha-256-120', 'sha-256-96', 'sha-256-64', 'sha-256-32', 'sha-384', 'sha-512', 'sha3-224', 'sha3-256', 'sha3-384', 'sha3-512', 'Unassigned', 'Reserved', 'Unassigned', 'blake2s-256', 'blake2b-256', 'blake2b-512', 'k12-256', 'k12-512'];
 
+export const verifySDJWTandDisclosures = async (sdJWTCombined: string, issuerPublicKey: KeyLike) => {
+  // 
+  return true;
+}
+
+// OLD
 const validateMatchSdDigestAndSdRelease =
   (sd_digests: SD_DIGESTS, sd_release: SD_RELEASE) => {
     Object.keys(sd_digests).map((key) => {
