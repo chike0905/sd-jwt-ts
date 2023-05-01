@@ -4,13 +4,41 @@ import { SD_DIGESTS, SD_JWT_RELEASE, SD_RELEASE, SVC } from "./types";
 import { separateJWTandSDJWTR, separateJWTandSVC } from "./utils";
 
 // ref: https://www.iana.org/assignments/named-information/named-information.xhtml
-// Accessed 2022.09.22
+// Accessed 2023.05.01
+// TODO: It should be accept only secure hash functions. see security considerations:
+// Spec Ref: https://www.ietf.org/archive/id/draft-ietf-oauth-selective-disclosure-jwt-04.html#name-choice-of-a-hash-algorithm
 // TODO: make enum for hash name string
 const HASH_NAME_STRING = ['Reserved', 'sha-256', 'sha-256-128', 'sha-256-120', 'sha-256-96', 'sha-256-64', 'sha-256-32', 'sha-384', 'sha-512', 'sha3-224', 'sha3-256', 'sha3-384', 'sha3-512', 'Unassigned', 'Reserved', 'Unassigned', 'blake2s-256', 'blake2b-256', 'blake2b-512', 'k12-256', 'k12-512'];
 
 export const verifySDJWTandDisclosures = async (sdJWTCombined: string, issuerPublicKey: KeyLike) => {
-  // 
+
   return true;
+}
+
+export const verifyPresentation = async (presentation: string, issuerPublicKey: KeyLike) => {
+  // 2. Separate the Presentation into the SD-JWT, the Disclosures (if any), and the Holder Binding JWT (if provided).
+  const presentations = presentation.split('~');
+  if (presentations.length === 1)
+    throw new Error("SD-JWT Presentation is invalid: last tilde MUST NOT be omitted.");
+
+  // 3. Validate the SD-JWT
+  const sdJWT = presentations[0];
+
+  // 3-1. Ensure that a signing algorithm was used that was deemed secure for the application. Refer to [RFC8725], Sections 3.1 and 3.2 for details. The none algorithm MUST NOT be accepted.
+  const sigAlg = JSON.parse(base64url.decode(sdJWT.split('.')[0]) as unknown as string)['alg'];
+  if (sigAlg === "none")
+    throw new Error("SD-JWT Presentation is invalid: The none algorithm MUST NOT be accepted.");
+  // 3-2. Validate the signature over the SD-JWT.
+  // 3-3. Validate the Issuer of the SD-JWT and that the signing key belongs to this Issuer.
+  // 3-4. Check that the SD-JWT is valid using nbf, iat, and exp claims, if provided in the SD-JWT, and not selectively disclosed.
+  const verificationResult = await jwtVerify(sdJWT, issuerPublicKey).catch((e) => {
+    throw new Error(`SD-JWT Verification Failed: ${e.message}`)
+  });
+  // 3-5. Check that the hash_alg claim is present and its value is understand and the hash algorithm is deemed secure.
+  if (!HASH_NAME_STRING.includes(verificationResult.payload["_sd_alg"] as string))
+    throw new Error('The hash algorithm identifier MUST be a value from the "Hash Name String" column in the IANA "Named Information Hash Algorithm" registry.');
+
+  return false;
 }
 
 // OLD

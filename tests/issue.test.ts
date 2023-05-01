@@ -73,6 +73,7 @@ describe('IssueSD-JWT', () => {
     expect(Array.isArray(jwtPayload['_sd'])).toBe(true);
 
     // digest of each disclosure is included in _sd.
+    // TODO: tmp support only flat sd-jwt
     disclosures.map((disclosure: string) => {
       const digest = hashDisclosure(disclosure);
       expect((jwtPayload['_sd'] as Array<string>).includes(digest)).toBe(true);

@@ -1,3 +1,4 @@
+import { Buffer } from 'buffer';
 import { base64url, decodeJwt, exportJWK, JWTPayload, SignJWT } from 'jose';
 import * as crypto from 'crypto';
 
@@ -5,8 +6,9 @@ import { createSDJWTwithRelease, SD_JWTClaims, SD_JWT_RELEASE, SVC } from "../sr
 import { createSVCandSDDigests, issueSDJWT, issueSDJWTinCombinedFormat } from "../src/issue";
 import { PAYLOAD, importKeyPairForIssuerAndHolder, Entity } from './params';
 
-import { verifySDJWTandDisclosures, verifySDJWTandSDJWTR, verifySDJWTandSVC } from '../src/verify';
+import { verifyPresentation, verifySDJWTandDisclosures, verifySDJWTandSDJWTR, verifySDJWTandSVC } from '../src/verify';
 import { SD_DIGESTS, SD_RELEASE } from '../src/types';
+import { createPresentation } from '../src/presentation';
 
 
 let ISSUER: Entity;
@@ -24,11 +26,146 @@ describe('Processing by the Holder', () => {
     const result = await verifySDJWTandDisclosures(TEST_SD_JWT, ISSUER.PUBLIC_KEY);
     expect(result).toBe(true);
   });
+});
+
+describe('Processing by the Holder', () => {
   // 6.2 Verification by the Verifier
   // 1. Determine if Holder Binding is to be checked according to the Verifier's policy for the use case at hand. This decision MUST NOT be based on whether a Holder Binding JWT is provided by the Holder or not. Refer to Section 8.6 for details.
   // 2. Separate the Presentation into the SD-JWT, the Disclosures (if any), and the Holder Binding JWT (if provided).
+  let PRESENTATION: string;
+  let TEST_DISCLOSURES: string[];
+  beforeEach(async () => {
+    const sd_jwt = TEST_SD_JWT.split('~')[0];
+    TEST_DISCLOSURES = TEST_SD_JWT.split('~').slice(1);
+    PRESENTATION = await createPresentation(TEST_SD_JWT, TEST_DISCLOSURES.slice(-2));
+  });
 
+  describe('Holder Binding', () => {
+    // TODO: not implemented
+    // Spec Ref: https://www.ietf.org/archive/id/draft-ietf-oauth-selective-disclosure-jwt-04.html#section-6.2-4.1
+  });
+
+  describe('2. Separate the Presentation into the SD-JWT', () => {
+    // Spec Ref: https://www.ietf.org/archive/id/draft-ietf-oauth-selective-disclosure-jwt-04.html#section-6.2-4.2
+    it('Presentation is not separated by ~ (instead -)', async () => {
+      const presentations = PRESENTATION.split('~');
+      const result = verifyPresentation(presentations.join('-'), ISSUER.PUBLIC_KEY);
+      await expect(result).rejects.toThrow("SD-JWT Presentation is invalid: last tilde MUST NOT be omitted.");
+    });
+  });
+
+  describe('3. Validate the SD-JWT', () => {
+    const dummy_payload = {
+      "_sd": [
+        "ckJk9Udk3k47PAOvPuk_cIKm2bVbPjZDos7kovYJnEk",
+        "E4DgYoEUR5-djXZgAEI4eKwf3Cft7EOLsNg8hjNGAWo",
+        "El6dxYmIimfZ-1eyaGMy2by658E33rD9zn-AtdOtB_Q",
+        "G4myB1_SHDRhjju4xBNUvb0NO11mWIBUnqXwb3qQ3UU",
+        "okAcAp1TVZDcaBeGeBHPdGGeLBRS2qG92bJfPaEcAaI",
+        "paWEYypDnBqlnYeLJcKCzXPdfRWy5c0rIzLoBz6aC9Y",
+        "xotLUeKqfG1UoFMpIkK5OWPh4C1rKfKWFfgjoSHQPlo"
+      ],
+      "_sd_alg": "sha-256",
+      "cnf": {
+        "kty": "EC",
+        "x": "Juiif_Dm5T-xVYbcNZ72jSAk4t4ij5Bmgl7WGKO0uJQ",
+        "y": "nqGkThWyZYFdQ3nnpkeoeey7edX7BV6-C9R3mOf1x1M",
+        "crv": "P-256",
+        "d": "mNCbN_oN0w43TgR_-wxa4tbZ7D6hTevIk1UtbiHXHXU"
+      }
+    };
+
+    // Spec Ref: https://www.ietf.org/archive/id/draft-ietf-oauth-selective-disclosure-jwt-04.html#section-6.2-4.3.1
+    describe("1. The none algorithm MUST NOT be accepted.", () => {
+      it('just replace alg to none', async () => {
+        const presentations = PRESENTATION.split('~');
+        const jwt = presentations[0].split('.');
+        jwt[0] = base64url.encode(JSON.stringify({ alg: 'none' }));
+        presentations[0] = jwt.join('.');
+
+        const result = verifyPresentation(presentations.join('~'), ISSUER.PUBLIC_KEY);
+        await expect(result).rejects.toThrow("SD-JWT Presentation is invalid: The none algorithm MUST NOT be accepted.");
+      });
+    });
+
+
+    describe("2. Validate the signature over the SD-JWT.", () => {
+      it("Signature invalid", async () => {
+        const presentations = PRESENTATION.split('~');
+        presentations[0] = presentations[0].slice(0, -2) + 'BB';
+        const result = verifyPresentation(presentations.join('~'), ISSUER.PUBLIC_KEY);
+        await expect(result).rejects.toThrow(/^SD-JWT Verification Failed: .*/);
+      });
+      it("Public Key is not match", async () => {
+        const result = verifyPresentation(PRESENTATION, HOLDER.PUBLIC_KEY);
+        await expect(result).rejects.toThrow(/^SD-JWT Verification Failed: .*/);
+      });
+    });
+
+    describe.skip("3. Validate the Issuer of the SD-JWT and that the signing key belongs to this Issuer.", () => { });
+
+    describe("4. Check that the SD-JWT is valid using nbf, iat, and exp claims, if provided in the SD-JWT.", () => {
+
+      it('nbf is invalid', async () => {
+        const jwt = await new SignJWT(dummy_payload)
+          .setNotBefore("100h")
+          .setProtectedHeader({ alg: 'ES256' })
+          .sign(ISSUER.PRIVATE_KEY);
+
+        console.log(jwt);
+
+        const presentations = PRESENTATION.split('~');
+        presentations[0] = jwt;
+        const result = verifyPresentation(presentations.join('~'), ISSUER.PUBLIC_KEY);
+        await expect(result).rejects.toThrow(/^SD-JWT Verification Failed: .*/);
+      });
+      it('exp is invalid', async () => {
+        const jwt = await new SignJWT(dummy_payload)
+          .setExpirationTime(1000)
+          .setProtectedHeader({ alg: 'ES256' })
+          .sign(ISSUER.PRIVATE_KEY);
+
+        const presentations = PRESENTATION.split('~');
+        presentations[0] = jwt;
+        const result = verifyPresentation(presentations.join('~'), ISSUER.PUBLIC_KEY);
+        await expect(result).rejects.toThrow(/^SD-JWT Verification Failed: .*/);
+      });
+    });
+
+    describe("5. Check that the _sd_alg claim value is understood and the hash algorithm is deemed secure.", () => {
+      it("invalid hash alg name", async () => {
+        dummy_payload._sd_alg = "sha256";
+        const jwt = await new SignJWT(dummy_payload)
+          .setProtectedHeader({ alg: 'ES256' })
+          .sign(ISSUER.PRIVATE_KEY);
+        const presentations = PRESENTATION.split('~');
+        presentations[0] = jwt;
+        const result = verifyPresentation(presentations.join('~'), ISSUER.PUBLIC_KEY);
+        await expect(result).rejects.toThrow('The hash algorithm identifier MUST be a value from the "Hash Name String" column in the IANA "Named Information Hash Algorithm" registry.');
+      });
+    });
+  });
+
+  describe('4. Process the Disclosures and _sd keys in the SD-JWT as follows', () => {
+    it('todo', () => {
+      expect(false).toBe(true);
+    })
+  });
+
+  describe('5. If Holder Binding is required ', () => {
+    it('todo', () => {
+      expect(false).toBe(true);
+    })
+  });
+
+
+  it('Verify SD-JWT Presentation', async () => {
+    const result = await verifyPresentation(PRESENTATION, ISSUER.PUBLIC_KEY);
+    expect(result).toBe(true);
+  });
 });
+
+
 
 
 
