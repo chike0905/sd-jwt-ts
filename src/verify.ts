@@ -2,6 +2,7 @@ import { base64url, importJWK, JWK, JWTPayload, jwtVerify, KeyLike, UnsecuredJWT
 import * as crypto from 'crypto';
 import { SD_DIGESTS, SD_JWT_RELEASE, SD_RELEASE, SVC } from "./types";
 import { separateJWTandSDJWTR, separateJWTandSVC } from "./utils";
+import { hashDisclosure } from "./disclosures";
 
 // ref: https://www.iana.org/assignments/named-information/named-information.xhtml
 // Accessed 2023.05.01
@@ -21,9 +22,11 @@ export const verifyPresentation = async (presentation: string, issuerPublicKey: 
   if (presentations.length === 1)
     throw new Error("SD-JWT Presentation is invalid: last tilde MUST NOT be omitted.");
 
-  // 3. Validate the SD-JWT
   const sdJWT = presentations[0];
+  const holderBindingJWT = presentations.slice(-1)[0];
+  const disclosures = presentations.slice(1, -1);
 
+  // 3. Validate the SD-JWT
   // 3-1. Ensure that a signing algorithm was used that was deemed secure for the application. Refer to [RFC8725], Sections 3.1 and 3.2 for details. The none algorithm MUST NOT be accepted.
   const sigAlg = JSON.parse(base64url.decode(sdJWT.split('.')[0]) as unknown as string)['alg'];
   if (sigAlg === "none")
@@ -34,11 +37,67 @@ export const verifyPresentation = async (presentation: string, issuerPublicKey: 
   const verificationResult = await jwtVerify(sdJWT, issuerPublicKey).catch((e) => {
     throw new Error(`SD-JWT Verification Failed: ${e.message}`)
   });
+
+  const sdJWTPayload = verificationResult.payload;
   // 3-5. Check that the hash_alg claim is present and its value is understand and the hash algorithm is deemed secure.
-  if (!HASH_NAME_STRING.includes(verificationResult.payload["_sd_alg"] as string))
+  if (!HASH_NAME_STRING.includes(sdJWTPayload["_sd_alg"] as string))
     throw new Error('The hash algorithm identifier MUST be a value from the "Hash Name String" column in the IANA "Named Information Hash Algorithm" registry.');
 
-  return false;
+  // 4. Process the Disclosures and _sd keys in the SD-JWT as follows
+  // 4-1. Create a copy of the SD-JWT payload, if required for further processing.
+  const copySDJWTPayload = Object.assign(sdJWTPayload);
+  const disclosuresDict: { [key: string]: string } = {};
+  // 4-2. Calculate the digest over the base64url-encoded string as described in Section 5.1.1.2.
+  disclosures.forEach((disclosure) => {
+    const hash = hashDisclosure(disclosure);
+    disclosuresDict[hash] = disclosure;
+  });
+
+  // TODO: temp it support flat SD-JWT
+  if (Object.keys(sdJWTPayload).includes("_sd")) {
+    // 4-3-1. If the key does not refer to an array, the Verifier MUST reject the Presentation.
+    if (!Array.isArray(sdJWTPayload._sd))
+      throw new Error('_sd claim is not array.');
+    // 4-3-2. 
+    sdJWTPayload._sd.forEach((digest: string) => {
+      // 4-3-2-1. Compare the value with the digests calculated previously and find the matching Disclosure. If no such Disclosure can be found, the digest MUST be ignored.
+      const disclosure = disclosuresDict[digest];
+      if (disclosure === undefined)
+        return;
+      // 4-3-2-2. If the Disclosure is not a JSON-encoded array of three elements, the Verifier MUST reject the Presentation.
+      let decoded;
+      try {
+        decoded = JSON.parse(base64url.decode(disclosure).toString());
+        if (!Array.isArray(decoded))
+          throw new Error('disclosure is not array.');
+        if (decoded.length !== 3)
+          throw new Error('disclosure array is not three elements.');
+      } catch (e: any) {
+        throw new Error(`Failed Decode Disclosure: ${e.message}`)
+      }
+
+      try {
+        // 4-3-2-3. Insert, at the level of the _sd key, a new claim using the claim name and claim value from the Disclosure.
+        // 4-3-2-4. If the claim name already exists at the same level, the Verifier MUST reject the Presentation.
+        if (Object.keys(sdJWTPayload).includes(decoded[1]))
+          throw new Error(`The claim name "${decoded[1]}" already exists at the same level`);
+        sdJWTPayload[decoded[1]] = decoded[2];
+      } catch (e: any) {
+        throw new Error(`Failed Verify Disclosure: ${e.message}`)
+      }
+
+      // TODO: tmp support only flat sd-jwt
+      // 4-3-2-5. If the decoded value contains an _sd key in an object, recursively process the key using the steps described in (*).
+    });
+  }
+  // 4-4. If any digests were found more than once in the previous step, the Verifier MUST reject the Presentation.
+
+  // 4-5. Remove all _sd keys from the SD-JWT payload.
+  delete sdJWTPayload._sd;
+
+  // 4-6. Remove the claim _sd_alg from the SD-JWT payload.
+  delete sdJWTPayload._sd_alg;
+  return sdJWTPayload;
 }
 
 // OLD

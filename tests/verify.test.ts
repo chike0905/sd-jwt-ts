@@ -9,12 +9,33 @@ import { PAYLOAD, importKeyPairForIssuerAndHolder, Entity } from './params';
 import { verifyPresentation, verifySDJWTandDisclosures, verifySDJWTandSDJWTR, verifySDJWTandSVC } from '../src/verify';
 import { SD_DIGESTS, SD_RELEASE } from '../src/types';
 import { createPresentation } from '../src/presentation';
+import { hashDisclosure } from '../src/disclosures';
 
 
 let ISSUER: Entity;
 let HOLDER: Entity;
 
 let TEST_SD_JWT: string;
+
+const dummy_payload = {
+  "_sd": [
+    "ckJk9Udk3k47PAOvPuk_cIKm2bVbPjZDos7kovYJnEk",
+    "E4DgYoEUR5-djXZgAEI4eKwf3Cft7EOLsNg8hjNGAWo",
+    "El6dxYmIimfZ-1eyaGMy2by658E33rD9zn-AtdOtB_Q",
+    "G4myB1_SHDRhjju4xBNUvb0NO11mWIBUnqXwb3qQ3UU",
+    "okAcAp1TVZDcaBeGeBHPdGGeLBRS2qG92bJfPaEcAaI",
+    "paWEYypDnBqlnYeLJcKCzXPdfRWy5c0rIzLoBz6aC9Y",
+    "xotLUeKqfG1UoFMpIkK5OWPh4C1rKfKWFfgjoSHQPlo"
+  ],
+  "_sd_alg": "sha-256",
+  "cnf": {
+    "kty": "EC",
+    "x": "Juiif_Dm5T-xVYbcNZ72jSAk4t4ij5Bmgl7WGKO0uJQ",
+    "y": "nqGkThWyZYFdQ3nnpkeoeey7edX7BV6-C9R3mOf1x1M",
+    "crv": "P-256",
+    "d": "mNCbN_oN0w43TgR_-wxa4tbZ7D6hTevIk1UtbiHXHXU"
+  }
+};
 
 beforeEach(async () => {
   ({ ISSUER, HOLDER } = await importKeyPairForIssuerAndHolder());
@@ -55,26 +76,6 @@ describe('Processing by the Holder', () => {
   });
 
   describe('3. Validate the SD-JWT', () => {
-    const dummy_payload = {
-      "_sd": [
-        "ckJk9Udk3k47PAOvPuk_cIKm2bVbPjZDos7kovYJnEk",
-        "E4DgYoEUR5-djXZgAEI4eKwf3Cft7EOLsNg8hjNGAWo",
-        "El6dxYmIimfZ-1eyaGMy2by658E33rD9zn-AtdOtB_Q",
-        "G4myB1_SHDRhjju4xBNUvb0NO11mWIBUnqXwb3qQ3UU",
-        "okAcAp1TVZDcaBeGeBHPdGGeLBRS2qG92bJfPaEcAaI",
-        "paWEYypDnBqlnYeLJcKCzXPdfRWy5c0rIzLoBz6aC9Y",
-        "xotLUeKqfG1UoFMpIkK5OWPh4C1rKfKWFfgjoSHQPlo"
-      ],
-      "_sd_alg": "sha-256",
-      "cnf": {
-        "kty": "EC",
-        "x": "Juiif_Dm5T-xVYbcNZ72jSAk4t4ij5Bmgl7WGKO0uJQ",
-        "y": "nqGkThWyZYFdQ3nnpkeoeey7edX7BV6-C9R3mOf1x1M",
-        "crv": "P-256",
-        "d": "mNCbN_oN0w43TgR_-wxa4tbZ7D6hTevIk1UtbiHXHXU"
-      }
-    };
-
     // Spec Ref: https://www.ietf.org/archive/id/draft-ietf-oauth-selective-disclosure-jwt-04.html#section-6.2-4.3.1
     describe("1. The none algorithm MUST NOT be accepted.", () => {
       it('just replace alg to none', async () => {
@@ -147,12 +148,64 @@ describe('Processing by the Holder', () => {
   });
 
   describe('4. Process the Disclosures and _sd keys in the SD-JWT as follows', () => {
-    it('todo', () => {
-      expect(false).toBe(true);
-    })
+    it('1. If the key does not refer to an array, the Verifier MUST reject the Presentation.', async () => {
+      await validateWithDummy_sdClaims("dummy");
+      await validateWithDummy_sdClaims(334);
+      await validateWithDummy_sdClaims(0);
+      // await validateWithDummy_sdClaims(undefined);
+      await validateWithDummy_sdClaims(null);
+      await validateWithDummy_sdClaims({ key: "dummy" });
+      async function validateWithDummy_sdClaims(dummy: any) {
+        //@ts-ignore
+        dummy_payload._sd = dummy;
+        const jwt = await new SignJWT(dummy_payload)
+          .setProtectedHeader({ alg: 'ES256' })
+          .sign(ISSUER.PRIVATE_KEY);
+        const presentations = PRESENTATION.split('~');
+        presentations[0] = jwt;
+        const result = verifyPresentation(presentations.join('~'), ISSUER.PUBLIC_KEY);
+        await expect(result).rejects.toThrow('_sd claim is not array.');
+      }
+    });
+
+    describe("2. Otherwise, process each entry in the _sd array as follows", () => {
+      async function insertDummyDigestsAndDisclosure(dummy: string) {
+        const claims = decodeJwt(TEST_SD_JWT.split("~")[0]);
+        (claims._sd as string[]).push(hashDisclosure(dummy));
+        const jwt = await new SignJWT(claims)
+          .setProtectedHeader({ alg: 'ES256' })
+          .sign(ISSUER.PRIVATE_KEY);
+        const presentations = PRESENTATION.split('~');
+        presentations[0] = jwt;
+        presentations.splice(-1, 0, dummy);
+        let presentation = presentations.join('~');
+        return presentation;
+      }
+      it('2. If the Disclosure is not a JSON-encoded array of three elements, the Verifier MUST reject the Presentation.', async () => {
+
+        await validateDummyDigests('hogehoge');
+        await validateDummyDigests(base64url.encode('hogehoge'));
+        await validateDummyDigests(base64url.encode(JSON.stringify([])));
+        await validateDummyDigests(base64url.encode(JSON.stringify(['hoge', 'fuga'])));
+        await validateDummyDigests(base64url.encode(JSON.stringify(['hoge', 'fuga', 'fugo', 'hofo'])));
+
+        async function validateDummyDigests(dummy: string) {
+          const presentation = await insertDummyDigestsAndDisclosure(dummy);
+          const result = verifyPresentation(presentation, ISSUER.PUBLIC_KEY);
+          await expect(result).rejects.toThrow(/^Failed Decode Disclosure: .*/);
+        }
+      });
+      it('4. If the claim name already exists at the same level, the Verifier MUST reject the Presentation.', async () => {
+        const presentation = await insertDummyDigestsAndDisclosure(base64url.encode(JSON.stringify(['hoge', 'cnf', 'dummy'])));
+        const result = verifyPresentation(presentation, ISSUER.PUBLIC_KEY);
+        await expect(result).rejects.toThrow('Failed Verify Disclosure: The claim name "cnf" already exists at the same level');
+      });
+      it.skip("5. If the decoded value contains an _sd key in an object, recursively process the key using the steps described in (*)", async () => { });
+    });
+    it.skip("4. If any digests were found more than once in the previous step, the Verifier MUST reject the Presentation.", () => { });
   });
 
-  describe('5. If Holder Binding is required ', () => {
+  describe.skip('5. If Holder Binding is required ', () => {
     it('todo', () => {
       expect(false).toBe(true);
     })
@@ -161,7 +214,10 @@ describe('Processing by the Holder', () => {
 
   it('Verify SD-JWT Presentation', async () => {
     const result = await verifyPresentation(PRESENTATION, ISSUER.PUBLIC_KEY);
-    expect(result).toBe(true);
+    const payload = Object.assign(PAYLOAD)
+    const jwk = await exportJWK(HOLDER.PUBLIC_KEY);
+    Object.defineProperty(payload, 'cnf', { value: jwk, enumerable: true });
+    expect(result).toEqual(payload);
   });
 });
 
