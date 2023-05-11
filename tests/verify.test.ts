@@ -135,8 +135,9 @@ describe('Processing by the Holder', () => {
 
     describe("5. Check that the _sd_alg claim value is understood and the hash algorithm is deemed secure.", () => {
       it("invalid hash alg name", async () => {
-        dummy_payload._sd_alg = "sha256";
-        const jwt = await new SignJWT(dummy_payload)
+        const dummy = Object.assign({}, dummy_payload);
+        dummy._sd_alg = "sha256";
+        const jwt = await new SignJWT(dummy)
           .setProtectedHeader({ alg: 'ES256' })
           .sign(ISSUER.PRIVATE_KEY);
         const presentations = PRESENTATION.split('~');
